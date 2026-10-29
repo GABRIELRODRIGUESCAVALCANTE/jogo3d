@@ -15,6 +15,8 @@ export interface SettingsData {
   sensitivity: number; // 0.3 a 2.0
   invertY: boolean;
   showFps: boolean;
+  /** Reduz a qualidade sozinho quando o jogo fica lento. */
+  autoQuality: boolean;
   volumeMaster: number; // 0 a 1
   volumeSfx: number;
   volumeAmbient: number;
@@ -88,6 +90,7 @@ function defaultSettings(): SettingsData {
     sensitivity: 1,
     invertY: false,
     showFps: false,
+    autoQuality: true,
     volumeMaster: 0.8,
     volumeSfx: 0.8,
     volumeAmbient: 0.6,

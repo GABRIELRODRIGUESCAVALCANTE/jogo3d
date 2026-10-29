@@ -40,7 +40,7 @@ export class SettingsPanel extends Panel {
       }
       const toggle = target.closest<HTMLElement>('[data-toggle]');
       if (toggle) {
-        const key = toggle.dataset.toggle as 'invertY' | 'showFps';
+        const key = toggle.dataset.toggle as 'invertY' | 'showFps' | 'autoQuality';
         this.game.settings.set(key, !this.game.settings.data[key]);
         this.ui.click();
         this.render();
@@ -68,7 +68,7 @@ export class SettingsPanel extends Panel {
             `<button role="radio" aria-checked="${o.value === current}" class="${o.value === current ? 'active' : ''}" data-key="${key}" data-value="${o.value}">${escapeHtml(o.label)}</button>`,
         )
         .join('')}</div>`;
-    const toggle = (key: 'invertY' | 'showFps', on: boolean) =>
+    const toggle = (key: 'invertY' | 'showFps' | 'autoQuality', on: boolean) =>
       `<button class="toggle ${on ? 'on' : ''}" role="switch" aria-checked="${on}" data-toggle="${key}"><span></span></button>`;
     const range = (key: keyof SettingsData, value: number, min: number, max: number, step: number) =>
       `<div class="range"><input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-range="${key}"><output>${this.formatRange(key, value)}</output></div>`;
@@ -78,7 +78,9 @@ export class SettingsPanel extends Panel {
         <h3>${icon('tela')} Gráficos</h3>
         <label class="setting"><span>Qualidade gráfica</span>${segmented('quality', QUALITY_OPTIONS, s.quality)}</label>
         <p class="setting-hint">Baixa: sem sombras e menos vegetação (ideal para celulares simples). Alta: sombras nítidas e maior distância de visão.</p>
+        <div class="setting"><span>Ajustar qualidade automaticamente</span>${toggle('autoQuality', s.autoQuality)}</div>
         <div class="setting"><span>Mostrar FPS</span>${toggle('showFps', s.showFps)}</div>
+        <div class="diagnostics" aria-live="off"></div>
 
         <h3>${icon('mao')} Controles</h3>
         <label class="setting"><span>Tipo de controle</span>${segmented('controlMode', CONTROL_OPTIONS, s.controlMode)}</label>
@@ -99,6 +101,23 @@ export class SettingsPanel extends Panel {
           <button class="btn btn-small btn-danger" data-delete="1" ${this.game.hasSave ? '' : 'disabled'}>${icon('lixeira')} Apagar salvamento</button>
         </div>
       </div>`;
+  }
+
+  private diagTimer = 0;
+
+  update(dt: number): void {
+    this.diagTimer -= dt;
+    if (this.diagTimer > 0) return;
+    this.diagTimer = 0.5;
+    const el = this.body.querySelector('.diagnostics');
+    if (!el) return;
+    const d = this.game.diagnostics();
+    el.innerHTML = `
+      <div><span>FPS</span><b>${Math.round(d.fps)}</b></div>
+      <div><span>Resolução</span><b>${d.width}×${d.height}</b></div>
+      <div><span>Chamadas de desenho</span><b>${d.calls}</b></div>
+      <div><span>Triângulos</span><b>${(d.triangles / 1000).toFixed(0)} mil</b></div>
+      <div class="diag-gpu"><span>Placa de vídeo</span><b>${escapeHtml(d.gpu)}</b></div>`;
   }
 
   private formatRange(key: keyof SettingsData, value: number): string {

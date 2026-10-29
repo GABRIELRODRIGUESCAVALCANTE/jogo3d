@@ -32,7 +32,14 @@ O comando já usa `--host`, então o terminal também mostra um endereço de red
 | `npm run build`     | Verifica os tipos (TypeScript) e gera a versão de produção em `dist/` |
 | `npm run preview`   | Serve a pasta `dist/` localmente para testar a versão de produção |
 | `npm test`          | Roda os testes automáticos da lógica do jogo (Vitest)             |
+| `npm run test:e2e`  | Abre o jogo num navegador e joga sozinho (Playwright)             |
 | `npm run typecheck` | Só verifica os tipos                                              |
+
+Na primeira vez, para os testes de ponta a ponta, instale o navegador do Playwright:
+
+```bash
+npx playwright install chromium
+```
 
 ---
 
@@ -175,6 +182,22 @@ funcionando com salvamento apenas em memória.
 
 ---
 
+## Automação no GitHub (CI e publicação)
+
+- **`.github/workflows/ci.yml`**: a cada push, verifica os tipos, roda os testes de lógica,
+  gera o build e joga o jogo num navegador (testes de ponta a ponta, incluindo a história
+  completa, controles de toque e o aviso de navegador sem WebGL).
+- **`.github/workflows/deploy.yml`**: a cada push na branch `main`, publica o jogo no
+  **GitHub Pages**. Configuração única: no GitHub, abra *Settings → Pages* e, em *Source*,
+  escolha **GitHub Actions**. O endereço fica `https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/`.
+
+## Funciona offline e pode ser instalado (PWA)
+
+Na versão publicada, um *service worker* (gerado no build pelo `vite.config.ts`, a partir de
+`src/pwa/service-worker.template.js`) guarda os arquivos do jogo. Depois da primeira visita,
+o jogo abre mesmo sem internet. No celular, use "Adicionar à tela inicial" / "Instalar app"
+para jogar em tela cheia, como um aplicativo.
+
 ## Publicar na internet (site estático com HTTPS)
 
 ```bash
@@ -230,7 +253,10 @@ O último comando abre o Android Studio, onde você gera o APK/AAB
 - Árvores, pedras, capim e decorações usam `InstancedMesh` (centenas de objetos em uma chamada de desenho).
 - Número fixo de luzes pontuais (sem recompilar shaders), terreno em chunks com distância de visão.
 - Qualidade **Baixa** desliga sombras, reduz a resolução e a vegetação — recomendada para celulares simples.
-- O jogo sugere reduzir a qualidade se detectar FPS baixo por vários segundos.
+- Se o FPS ficar baixo por vários segundos, o jogo reduz a qualidade sozinho
+  (pode ser desligado em **Opções → Ajustar qualidade automaticamente**).
+- Em **Opções → Gráficos** há um diagnóstico com FPS, resolução, chamadas de desenho,
+  triângulos e o nome da placa de vídeo — útil para testar em celulares reais.
 - Ative **Opções → Mostrar FPS** para acompanhar o desempenho.
 
 ## Créditos e licença

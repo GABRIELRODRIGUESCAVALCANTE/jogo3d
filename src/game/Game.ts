@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { AudioManager } from '../core/AudioManager';
 import { Input } from '../core/Input';
 import { clamp, smoothstep } from '../core/math';
-import { DAY_LENGTH_SECONDS, Settings } from '../core/Settings';
+import { DAY_LENGTH_SECONDS, QUALITY_PRESETS, Settings } from '../core/Settings';
 import { BuildingSystem } from './Building';
 import { CameraController } from './CameraController';
 import { CollisionWorld } from './Collision';
@@ -89,6 +89,8 @@ export class Game {
   private fpsTime = 0;
   private lowFpsTime = 0;
   private perfWarned = false;
+  private qualityCooldown = 0;
+  private gpuName: string | null = null;
   private boundaryCooldown = 0;
   private blockedCooldown = 0;
   private torchLight!: LightSource;
@@ -223,10 +225,11 @@ export class Game {
 
   private frame = (now: number): void => {
     if (this.contextLost) return;
-    const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
+    const rawDt = Math.max(0, (now - this.lastTime) / 1000);
+    const dt = Math.min(0.1, rawDt);
     this.lastTime = now;
     this.elapsed += dt;
-    this.measureFps(dt);
+    this.measureFps(rawDt);
 
     try {
       const blocking = this.ui.isBlocking();
@@ -370,22 +373,62 @@ export class Game {
     if (this.autosaveTimer <= 0) void this.saveGame(false);
   }
 
-  private measureFps(dt: number): void {
+  /**
+   * Mede o FPS real. Se o jogo ficar lento por vários segundos, baixa a
+   * qualidade sozinho (ou apenas sugere, se o ajuste automático estiver desligado).
+   */
+  private measureFps(frameSeconds: number): void {
+    // Pausas longas (aba em segundo plano) não contam.
+    if (frameSeconds > 1) return;
     this.fpsFrames++;
-    this.fpsTime += dt;
-    if (this.fpsTime >= 0.5) {
-      this.fps = this.fpsFrames / this.fpsTime;
-      this.fpsFrames = 0;
-      this.fpsTime = 0;
-      // Sugere reduzir a qualidade se o jogo estiver lento por muito tempo.
-      if (this.state === 'playing' && !this.perfWarned && this.settings.data.quality !== 'baixa') {
-        this.lowFpsTime = this.fps < 24 ? this.lowFpsTime + 0.5 : Math.max(0, this.lowFpsTime - 0.5);
-        if (this.lowFpsTime > 8) {
-          this.perfWarned = true;
-          this.ui.notify.toast('O jogo parece lento neste aparelho. Experimente a qualidade "Baixa" em Opções.', 'warning');
-        }
+    this.fpsTime += frameSeconds;
+    if (this.fpsTime < 0.5) return;
+    this.fps = this.fpsFrames / this.fpsTime;
+    this.fpsFrames = 0;
+    this.fpsTime = 0;
+    this.qualityCooldown = Math.max(0, this.qualityCooldown - 0.5);
+
+    const s = this.settings;
+    if (this.state !== 'playing' || this.ui.isBlocking() || s.data.quality === 'baixa' || this.qualityCooldown > 0) {
+      this.lowFpsTime = 0;
+      return;
+    }
+    this.lowFpsTime = this.fps < 24 ? this.lowFpsTime + 0.5 : Math.max(0, this.lowFpsTime - 1);
+    if (this.lowFpsTime < 6) return;
+    this.lowFpsTime = 0;
+    if (s.data.autoQuality) {
+      const next = s.data.quality === 'alta' ? 'media' : 'baixa';
+      s.set('quality', next);
+      this.qualityCooldown = 20;
+      this.ui.notify.toast(`O jogo estava lento: qualidade ajustada para "${QUALITY_PRESETS[next].label}".`, 'info', 'tela');
+    } else if (!this.perfWarned) {
+      this.perfWarned = true;
+      this.ui.notify.toast('O jogo parece lento neste aparelho. Experimente a qualidade "Baixa" em Opções.', 'warning');
+    }
+  }
+
+  /** Números de desempenho exibidos em Opções → Desempenho. */
+  diagnostics(): { fps: number; gpu: string; width: number; height: number; pixelRatio: number; calls: number; triangles: number } {
+    if (this.gpuName === null) {
+      this.gpuName = 'desconhecida';
+      try {
+        const gl = this.renderer.getContext();
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        this.gpuName = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+      } catch {
+        /* alguns navegadores escondem essa informação */
       }
     }
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    return {
+      fps: this.fps,
+      gpu: this.gpuName,
+      width: size.x,
+      height: size.y,
+      pixelRatio: this.renderer.getPixelRatio(),
+      calls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+    };
   }
 
   /** Câmera mais próxima e teto escondido dentro da caverna e das cabanas. */
