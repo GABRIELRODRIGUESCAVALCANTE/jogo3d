@@ -1,0 +1,15 @@
+{
+  "name": "Além do Horizonte",
+  "short_name": "Além do Horizonte",
+  "description": "Aventura 3D de mundo aberto: explore, colete, construa e descubra os segredos da ilha.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b2230",
+  "theme_color": "#0e3b4f",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

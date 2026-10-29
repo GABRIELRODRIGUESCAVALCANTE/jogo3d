@@ -1,0 +1,194 @@
+/**
+ * Missões. Cada missão tem objetivos, recompensas e pré-requisitos
+ * (`requires`). Quando todos os pré-requisitos são concluídos, a missão
+ * fica ativa automaticamente.
+ */
+import type { ItemBundle, ItemId } from './items';
+import type { RegionId } from './regions';
+import type { StructureId } from './structures';
+import { PLACES, type Place } from '../world/layout';
+
+export type ObjectiveDef =
+  | { type: 'collect'; item: ItemId; amount: number }
+  | { type: 'craft'; item: ItemId; amount: number }
+  | { type: 'use'; item: ItemId; amount: number }
+  | { type: 'build'; structure: StructureId; amount: number }
+  | { type: 'visit'; region: RegionId }
+  | { type: 'interact'; target: string; label: string }
+  | { type: 'level'; level: number };
+
+export interface QuestDef {
+  id: string;
+  title: string;
+  description: string;
+  objectives: ObjectiveDef[];
+  requires: string[];
+  rewards: { xp: number; items?: ItemBundle };
+  /** Local sugerido (aparece no mapa e como um feixe de luz no mundo). */
+  target?: Place;
+  /** Texto exibido ao concluir. */
+  completeText?: string;
+}
+
+export const QUESTS: QuestDef[] = [
+  {
+    id: 'q_madeira',
+    title: 'Primeiros Passos',
+    description: 'Você acordou numa praia desconhecida. Corte árvores para juntar madeira.',
+    objectives: [{ type: 'collect', item: 'madeira', amount: 5 }],
+    requires: [],
+    rewards: { xp: 30, items: { fruta: 2 } },
+    target: { x: -6, z: 116 },
+    completeText: 'Com madeira em mãos, a ilha parece um pouco menos hostil.',
+  },
+  {
+    id: 'q_bau',
+    title: 'O Baú na Areia',
+    description: 'Algo brilha perto das palmeiras a oeste da praia. Vá conferir!',
+    objectives: [{ type: 'interact', target: 'bau_praia', label: 'Abra o baú da praia' }],
+    requires: [],
+    rewards: { xp: 25 },
+    target: PLACES.chestBeach,
+  },
+  {
+    id: 'q_recursos',
+    title: 'Recursos da Ilha',
+    description: 'Pedras soltas e capim alto estão por toda parte. Junte o necessário para suas primeiras ferramentas.',
+    objectives: [
+      { type: 'collect', item: 'pedra', amount: 4 },
+      { type: 'collect', item: 'fibra', amount: 6 },
+    ],
+    requires: ['q_madeira'],
+    rewards: { xp: 40 },
+    target: { x: 12, z: 102 },
+  },
+  {
+    id: 'q_frutas',
+    title: 'Sabor Tropical',
+    description: 'Os arbustos da floresta estão carregados de frutas. Colha algumas e coma uma para recuperar energia.',
+    objectives: [
+      { type: 'collect', item: 'fruta', amount: 3 },
+      { type: 'use', item: 'fruta', amount: 1 },
+    ],
+    requires: ['q_madeira'],
+    rewards: { xp: 30 },
+  },
+  {
+    id: 'q_ferramentas',
+    title: 'Ferramentas Primitivas',
+    description: 'Abra o menu de fabricação (tecla C) e transforme fibras em corda. Depois, faça um machado.',
+    objectives: [
+      { type: 'craft', item: 'corda', amount: 1 },
+      { type: 'craft', item: 'machado', amount: 1 },
+    ],
+    requires: ['q_recursos'],
+    rewards: { xp: 60, items: { corda: 1 } },
+  },
+  {
+    id: 'q_bancada',
+    title: 'Oficina ao Ar Livre',
+    description: 'Abra o menu de construção (tecla B) e construa uma Bancada de Trabalho na clareira.',
+    objectives: [{ type: 'build', structure: 'bancada', amount: 1 }],
+    requires: ['q_ferramentas'],
+    rewards: { xp: 60 },
+    target: PLACES.clearing,
+  },
+  {
+    id: 'q_fogueira',
+    title: 'Luz na Escuridão',
+    description: 'As noites na ilha são longas. Construa uma fogueira para se aquecer e assar frutas.',
+    objectives: [{ type: 'build', structure: 'fogueira', amount: 1 }],
+    requires: ['q_ferramentas'],
+    rewards: { xp: 50, items: { fruta: 2 } },
+    target: PLACES.clearing,
+  },
+  {
+    id: 'q_cabana',
+    title: 'Um Lar na Ilha',
+    description: 'Junte 30 madeiras, 12 pedras e 4 cordas e construa sua cabana na Clareira do Construtor.',
+    objectives: [{ type: 'build', structure: 'cabana', amount: 1 }],
+    requires: ['q_bancada'],
+    rewards: { xp: 120 },
+    target: PLACES.clearing,
+    completeText: 'Você agora tem um lar. Use a cama da cabana para dormir até o amanhecer.',
+  },
+  {
+    id: 'q_ruinas',
+    title: 'Ecos do Passado',
+    description: 'O fragmento do baú tem símbolos estranhos. Siga a trilha a leste até as ruínas e examine o monólito.',
+    objectives: [
+      { type: 'visit', region: 'ruinas' },
+      { type: 'interact', target: 'monolito', label: 'Examine o monólito' },
+    ],
+    requires: ['q_bau'],
+    rewards: { xp: 80 },
+    target: PLACES.monolith,
+  },
+  {
+    id: 'q_floresta',
+    title: 'Sob a Grande Árvore',
+    description: 'O monólito fala de um fragmento guardado "aos pés da árvore mais antiga". Procure a árvore gigante a oeste.',
+    objectives: [{ type: 'interact', target: 'bau_floresta', label: 'Encontre o baú da árvore gigante' }],
+    requires: ['q_ruinas'],
+    rewards: { xp: 70 },
+    target: PLACES.chestForest,
+  },
+  {
+    id: 'q_picareta',
+    title: 'Força Bruta',
+    description: 'Para abrir caminho pelas rochas, você precisa de uma picareta. Fabrique-a na bancada (nível 3).',
+    objectives: [{ type: 'craft', item: 'picareta', amount: 1 }],
+    requires: ['q_ruinas', 'q_bancada'],
+    rewards: { xp: 70 },
+  },
+  {
+    id: 'q_caverna',
+    title: 'A Caverna Selada',
+    description: 'Ao norte, no pé da montanha, uma caverna está bloqueada por entulho. Use a picareta e entre.',
+    objectives: [
+      { type: 'interact', target: 'entulho', label: 'Remova o entulho da entrada' },
+      { type: 'visit', region: 'caverna' },
+    ],
+    requires: ['q_picareta'],
+    rewards: { xp: 90 },
+    target: PLACES.caveEntrance,
+  },
+  {
+    id: 'q_cristais',
+    title: 'Cristais Luminosos',
+    description: 'Minere cristais com a picareta e pegue o fragmento guardado no fundo da caverna.',
+    objectives: [
+      { type: 'collect', item: 'cristal', amount: 5 },
+      { type: 'interact', target: 'bau_caverna', label: 'Abra o baú da caverna' },
+    ],
+    requires: ['q_caverna'],
+    rewards: { xp: 100 },
+    target: PLACES.chestCave,
+  },
+  {
+    id: 'q_portal',
+    title: 'O Portal dos Lumeni',
+    description: 'Leve 3 Fragmentos Antigos e 5 Cristais ao altar das ruínas para despertar o portal.',
+    objectives: [{ type: 'interact', target: 'altar', label: 'Ative o altar das ruínas' }],
+    requires: ['q_cristais', 'q_floresta'],
+    rewards: { xp: 150 },
+    target: PLACES.altar,
+  },
+  {
+    id: 'q_horizonte',
+    title: 'Além do Horizonte',
+    description: 'O feixe do portal aponta para o pico ao norte. Suba a montanha e acenda o Farol dos Lumeni.',
+    objectives: [
+      { type: 'visit', region: 'pico' },
+      { type: 'interact', target: 'farol', label: 'Acenda o farol do pico' },
+    ],
+    requires: ['q_portal'],
+    rewards: { xp: 200 },
+    target: PLACES.peak,
+    completeText: 'O farol brilha outra vez. Muito além do horizonte, outra luz responde...',
+  },
+];
+
+export function getQuest(id: string): QuestDef | undefined {
+  return QUESTS.find((q) => q.id === id);
+}

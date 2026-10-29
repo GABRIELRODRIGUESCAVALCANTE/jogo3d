@@ -1,0 +1,8 @@
+{
+  "appId": "com.alemdohorizonte.jogo",
+  "appName": "Além do Horizonte",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#0b2230"
+  }
+}

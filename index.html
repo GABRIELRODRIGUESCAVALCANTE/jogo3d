@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0e3b4f" />
+    <meta
+      name="description"
+      content="Além do Horizonte: aventura 3D de mundo aberto no navegador. Explore uma ilha misteriosa, colete recursos, construa sua cabana e descubra os segredos dos Lumeni."
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/svg+xml" href="/assets/icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Além do Horizonte</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="game-container"></div>
+      <div id="ui-root"></div>
+    </div>
+    <noscript>
+      <p style="font-family: sans-serif; padding: 24px">Além do Horizonte precisa do JavaScript ativado para funcionar.</p>
+    </noscript>
+    <script>
+      // Se o código do jogo não começar a rodar (navegador muito antigo ou falha de rede),
+      // mostra uma mensagem em vez de uma tela vazia.
+      setTimeout(function () {
+        if (window.__adhIniciado) return;
+        var app = document.getElementById('app');
+        if (app)
+          app.innerHTML =
+            '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0b2230;color:#fff8ea;font-family:sans-serif;padding:24px;text-align:center">' +
+            '<div><h1 style="margin:0 0 12px">Além do Horizonte</h1><p>Não foi possível carregar o jogo. Verifique sua conexão e use um navegador atualizado (Chrome, Edge, Firefox ou Safari).</p>' +
+            '<button onclick="location.reload()" style="margin-top:12px;padding:12px 20px;border-radius:12px;border:0;background:#ffcf5c;font-weight:700">Tentar novamente</button></div></div>';
+      }, 30000);
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

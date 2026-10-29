@@ -1,0 +1,137 @@
+/**
+ * Ícones em SVG desenhados à mão (nenhum arquivo externo necessário).
+ * Ícones de itens são coloridos; ícones de interface usam `currentColor`
+ * para herdar a cor do texto.
+ */
+
+const svg = (body: string, extra = '') =>
+  `<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false" ${extra}>${body}</svg>`;
+
+const ui = (body: string) =>
+  svg(body, 'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"');
+
+export const ICONS: Record<string, string> = {
+  // ----- Itens -----
+  madeira: svg(`
+    <rect x="3" y="10" width="23" height="12" rx="6" fill="#9a6a3c"/>
+    <path d="M7 13.5h11M9 18.5h10" stroke="#74491f" stroke-width="1.5" stroke-linecap="round"/>
+    <ellipse cx="25" cy="16" rx="4.2" ry="6" fill="#efc489"/>
+    <ellipse cx="25" cy="16" rx="2.3" ry="3.4" fill="none" stroke="#b07a43" stroke-width="1.3"/>
+    <circle cx="25" cy="16" r=".9" fill="#b07a43"/>`),
+  pedra: svg(`
+    <path d="M5 21l3-9 7-4 8 2 5 7-2 7-9 2-9-1z" fill="#9c978e"/>
+    <path d="M8 12l7-4 8 2-6 5z" fill="#c4bfb6"/>
+    <path d="M17 15l6-5 5 7-6 2z" fill="#857f77"/>
+    <path d="M5 21l12-6 5 4-2 6-9 2z" fill="#a9a399"/>`),
+  fibra: svg(`
+    <path d="M10 29c1-8 0-15-4-23M14 29c0-9 1-16 0-24M18 29c0-8 2-15 6-22M22 29c-1-6 1-11 5-15" stroke="#a5c957" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <path d="M12 29c0-7-2-12-5-17M20 29c1-7 3-11 7-14" stroke="#c7d36a" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <rect x="9" y="19" width="15" height="4" rx="2" fill="#c9a26b"/>`),
+  fruta: svg(`
+    <path d="M16 9c7 0 11 5 11 11s-5 9-11 9-11-3-11-9 4-11 11-11z" fill="#ff7a3d"/>
+    <path d="M16 9c5 0 8 3 9 7-4-3-9-3-13 0-2 1-4 1-6 0 1-4 5-7 10-7z" fill="#ffb347"/>
+    <ellipse cx="11" cy="17" rx="2" ry="3" fill="#ffd28a" opacity=".8"/>
+    <path d="M16 9c0-3 1-5 3-6" stroke="#6b4a2a" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M18 6c3-3 7-2 8 0-3 2-6 2-8 0z" fill="#5cb848"/>`),
+  fruta_assada: svg(`
+    <path d="M4 28L27 5" stroke="#8b5a2b" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="13" cy="19" r="6" fill="#c8612a"/>
+    <circle cx="20" cy="12" r="5" fill="#d9772f"/>
+    <circle cx="11.5" cy="17.5" r="1.6" fill="#f2a65a"/>
+    <path d="M22 26c-1-2 1-3 0-5M26 23c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.5" fill="none" stroke-linecap="round"/>`),
+  cristal: svg(`
+    <path d="M16 2l6 9-6 19-6-19z" fill="#7ef4ff"/>
+    <path d="M16 2l6 9-6 19z" fill="#3fc3e6"/>
+    <path d="M8 13l3 4-3 10-3-10z" fill="#b896ff"/>
+    <path d="M24 14l3 4-3 9-3-9z" fill="#b896ff"/>
+    <path d="M24 14l3 4-3 9z" fill="#8b6bdc"/>
+    <path d="M13 9l3-5 2 6z" fill="#e6fdff" opacity=".9"/>`),
+  reliquia: svg(`
+    <path d="M6 6l14-2 7 6-2 17-12 2-8-6z" fill="#6c7280"/>
+    <path d="M6 6l14-2 7 6-9 2z" fill="#8a91a0"/>
+    <circle cx="16" cy="17" r="5" fill="none" stroke="#5ee8ff" stroke-width="1.8"/>
+    <path d="M16 10v3M16 21v3M9 17h3M20 17h3" stroke="#5ee8ff" stroke-width="1.6" stroke-linecap="round"/>
+    <circle cx="16" cy="17" r="1.6" fill="#b8f6ff"/>`),
+  corda: svg(`
+    <ellipse cx="16" cy="17" rx="11" ry="9" fill="none" stroke="#c9a26b" stroke-width="3.2"/>
+    <ellipse cx="16" cy="17" rx="6" ry="4.6" fill="none" stroke="#b08a52" stroke-width="3"/>
+    <path d="M25 22c2 3 3 5 2 7" stroke="#c9a26b" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M8 12l2 2M13 9l1 2.5M20 9l-1 2.5" stroke="#8a6a3c" stroke-width="1.2"/>`),
+  machado: svg(`
+    <path d="M9 29L22 9" stroke="#8b5a2b" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M17 6c4-3 10-2 12 3l-8 7c-2-1-4-4-4-6z" fill="#b8bfc6"/>
+    <path d="M24 5c3 1 5 3 5 4l-8 7c0-2 0-4-1-5z" fill="#8d959c"/>
+    <path d="M17 13l3 2" stroke="#c9a26b" stroke-width="3" stroke-linecap="round"/>`),
+  picareta: svg(`
+    <path d="M10 29L20 10" stroke="#8b5a2b" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M4 10c6-6 18-7 25-2-6-1-12 0-17 3-3 1-6 1-8-1z" fill="#9aa1a8"/>
+    <path d="M29 8c-6-1-12 0-17 3l3 2c4-3 9-4 14-5z" fill="#7d858c"/>`),
+  tocha: svg(`
+    <path d="M14 30l2-16 2 16z" fill="#8b5a2b"/>
+    <rect x="12.5" y="13" width="7" height="3" rx="1" fill="#c9a26b"/>
+    <path d="M16 2c5 4 6 8 3 11h-6c-3-3-1-7 3-11z" fill="#ff8a3d"/>
+    <path d="M16 6c2.5 2.5 3 5 1.4 7h-2.8c-1.6-2-1-4.5 1.4-7z" fill="#ffd166"/>`),
+  cabana: svg(`
+    <path d="M3 15L16 4l13 11" fill="#c9573c"/>
+    <path d="M3 15L16 4l13 11-2 1L16 7 5 16z" fill="#a8442f"/>
+    <rect x="6" y="15" width="20" height="13" fill="#9a6a3f"/>
+    <path d="M6 19h20M6 23h20" stroke="#7a5232" stroke-width="1.3"/>
+    <rect x="13" y="19" width="6" height="9" fill="#5e3d24"/>
+    <rect x="21" y="5" width="3" height="6" fill="#8e877b"/>`),
+  fogueira: svg(`
+    <path d="M5 27l22-6M5 21l22 6" stroke="#8b5a2b" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M16 3c6 5 8 10 4 16h-8c-4-6-2-11 4-16z" fill="#ff6b2d"/>
+    <path d="M16 9c3 3 4 6 2 10h-4c-2-4-1-7 2-10z" fill="#ffd166"/>`),
+  bancada: svg(`
+    <rect x="3" y="13" width="26" height="4" rx="1" fill="#b98552"/>
+    <path d="M6 17v11M26 17v11M6 23h20" stroke="#7a5232" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M10 13V8M8 8h7" stroke="#8d9196" stroke-width="2.6" stroke-linecap="round"/>
+    <rect x="18" y="8" width="7" height="5" rx="1" fill="#9d978d"/>`),
+  cerca: svg(`
+    <path d="M7 28V8l2-3 2 3v20M15 28V8l2-3 2 3v20M23 28V8l2-3 2 3v20" fill="#9a6a3f"/>
+    <path d="M4 13h25M4 22h25" stroke="#7a5232" stroke-width="2.6" stroke-linecap="round"/>`),
+  caminho: svg(`
+    <ellipse cx="9" cy="24" rx="6" ry="4" fill="#b3ada3"/>
+    <ellipse cx="22" cy="20" rx="6" ry="4" fill="#c2bcb1"/>
+    <ellipse cx="11" cy="12" rx="5" ry="3.5" fill="#c2bcb1"/>
+    <ellipse cx="23" cy="8" rx="5" ry="3.3" fill="#b3ada3"/>`),
+  lanterna: svg(`
+    <path d="M16 29V12" stroke="#7a5232" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M10 6l6-4 6 4z" fill="#7a5232"/>
+    <rect x="11" y="6" width="10" height="9" rx="1" fill="none" stroke="#7a5232" stroke-width="1.6"/>
+    <path d="M16 7l2.5 3.5-2.5 4-2.5-4z" fill="#7ef4ff"/>
+    <rect x="12" y="27" width="8" height="3" rx="1" fill="#9d978d"/>`),
+
+  // ----- Interface -----
+  mochila: ui(`<path d="M9 11a7 7 0 0 1 14 0v15a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z"/><path d="M12 11V8a4 4 0 0 1 8 0v3"/><path d="M12 19h8v5h-8z"/>`),
+  martelo: ui(`<path d="M15 13L5 26l2 2 12-11"/><path d="M14 8l6-4 8 8-4 6z"/>`),
+  construir: ui(`<path d="M4 15L16 5l12 10"/><path d="M7 13v14h18V13"/><path d="M16 17v7M12.5 20.5h7"/>`),
+  mapa: ui(`<path d="M4 8l8-3 8 3 8-3v19l-8 3-8-3-8 3z"/><path d="M12 5v19M20 8v19"/>`),
+  missao: ui(`<path d="M8 4h13l4 4v20H8z"/><path d="M12 12h9M12 17h9M12 22h5"/>`),
+  pausa: ui(`<path d="M11 7v18M21 7v18"/>`),
+  engrenagem: ui(`<circle cx="16" cy="16" r="4"/><path d="M16 3v4M16 25v4M3 16h4M25 16h4M6.8 6.8l2.8 2.8M22.4 22.4l2.8 2.8M6.8 25.2l2.8-2.8M22.4 9.6l2.8-2.8"/>`),
+  fechar: ui(`<path d="M8 8l16 16M24 8L8 24"/>`),
+  girar: ui(`<path d="M25 16a9 9 0 1 1-3-6.7"/><path d="M23 4v6h-6"/>`),
+  check: ui(`<path d="M6 17l6 6L26 9"/>`),
+  pular: ui(`<path d="M16 26V7"/><path d="M8 14l8-8 8 8"/>`),
+  mao: ui(`<path d="M10 17V8a2 2 0 0 1 4 0v7M14 14V6a2 2 0 0 1 4 0v8M18 14V8a2 2 0 0 1 4 0v9"/><path d="M22 13a2 2 0 0 1 4 0v5c0 6-4 10-9 10s-7-2-9-6l-3-5a2 2 0 0 1 3-2l2 2"/>`),
+  correr: ui(`<path d="M18 3l-9 15h7l-2 11 9-15h-7z"/>`),
+  salvar: ui(`<path d="M6 5h16l4 4v18H6z"/><path d="M10 5v7h10V5M10 27v-8h12v8"/>`),
+  sair: ui(`<path d="M13 5H6v22h7"/><path d="M20 10l6 6-6 6M26 16H12"/>`),
+  lixeira: ui(`<path d="M5 9h22M12 9V5h8v4M8 9l1.5 18h13L24 9"/><path d="M14 14v8M18 14v8"/>`),
+  play: ui(`<path d="M10 6l16 10-16 10z"/>`),
+  info: ui(`<circle cx="16" cy="16" r="12"/><path d="M16 15v8M16 10v.5"/>`),
+  tela: ui(`<path d="M5 11V5h6M21 5h6v6M27 21v6h-6M11 27H5v-6"/>`),
+  remover: ui(`<path d="M6 26L26 6"/><path d="M5 15l7-7M17 27l10-10"/>`),
+  alvo: ui(`<circle cx="16" cy="16" r="11"/><circle cx="16" cy="16" r="5"/><path d="M16 2v5M16 25v5M2 16h5M25 16h5"/>`),
+  estrela: svg(`<path d="M16 3l4 8.5 9 1.2-6.6 6.2 1.7 9.1L16 23.6 7.9 28l1.7-9.1L3 12.7l9-1.2z" fill="#ffd166" stroke="#c98f1d" stroke-width="1.5" stroke-linejoin="round"/>`),
+  raio: svg(`<path d="M18 2L7 18h8l-2 12 12-17h-8z" fill="#7bd88f" stroke="#3f9e57" stroke-width="1.5" stroke-linejoin="round"/>`),
+  sol: svg(`<circle cx="16" cy="16" r="6.5" fill="#ffd166"/><path d="M16 3v4M16 25v4M3 16h4M25 16h4M6.8 6.8l2.8 2.8M22.4 22.4l2.8 2.8M6.8 25.2l2.8-2.8M22.4 9.6l2.8-2.8" stroke="#ffd166" stroke-width="2.4" stroke-linecap="round"/>`),
+  lua: svg(`<path d="M21 4a12 12 0 1 0 7 17A10 10 0 0 1 21 4z" fill="#dfe7ff"/><circle cx="13" cy="15" r="1.6" fill="#b8c4ea"/><circle cx="17" cy="22" r="2" fill="#b8c4ea"/>`),
+  bussola: svg(`<circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M16 6l3.5 10H12.5z" fill="#ff6b6b"/><path d="M16 26l-3.5-10h7z" fill="currentColor"/>`),
+};
+
+/** Retorna o SVG de um ícone (ou um círculo vazio se não existir). */
+export function icon(name: string): string {
+  return ICONS[name] ?? ui('<circle cx="16" cy="16" r="10"/>');
+}

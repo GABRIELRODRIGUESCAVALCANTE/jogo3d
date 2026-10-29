@@ -1,0 +1,1136 @@
+/**
+ * Game: o "maestro" do jogo.
+ *
+ * Cria o renderizador, o mundo e todos os sistemas, conecta os eventos entre
+ * eles e roda o laço principal (atualizar → desenhar) a cada quadro.
+ */
+import * as THREE from 'three';
+import { AudioManager } from '../core/AudioManager';
+import { Input } from '../core/Input';
+import { clamp, smoothstep } from '../core/math';
+import { DAY_LENGTH_SECONDS, Settings } from '../core/Settings';
+import { BuildingSystem } from './Building';
+import { CameraController } from './CameraController';
+import { CollisionWorld } from './Collision';
+import { CraftingSystem } from './Crafting';
+import { ITEMS, type ItemBundle, type ItemId } from './data/items';
+import { LORE } from './data/lore';
+import { getRecipe, RECIPES } from './data/recipes';
+import { getRegion, regionAt } from './data/regions';
+import { STRUCTURES, type StructureId } from './data/structures';
+import { createEventBus, type GameEventBus } from './events';
+import { InteractionSystem, type InteractionContext } from './InteractionSystem';
+import { Inventory } from './Inventory';
+import { LightManager, type LightSource } from './LightManager';
+import { Particles } from './Particles';
+import { Player } from './Player';
+import { Progression } from './Progression';
+import { QuestSystem } from './Quests';
+import { SAVE_VERSION, type SaveData } from './save/SaveData';
+import { LocalStorageProvider } from './save/StorageProvider';
+import { SaveSystem } from './SaveSystem';
+import { World } from './World';
+import { WorldState } from './WorldState';
+import { PLACES } from './world/layout';
+import type { MapMarker, MapView } from '../ui/MapRenderer';
+import { MapRenderer } from '../ui/MapRenderer';
+import { UIManager } from '../ui/UIManager';
+import { nextFrame } from '../ui/dom';
+import { icon } from '../ui/icons';
+
+export type GameState = 'loading' | 'menu' | 'playing';
+
+const AUTOSAVE_SECONDS = 60;
+const MENU_FOCUS = new THREE.Vector3(10, 4, 30);
+
+export class Game {
+  // --- Núcleo ---
+  readonly settings = new Settings();
+  readonly audio = new AudioManager();
+  readonly bus: GameEventBus = createEventBus();
+  readonly canvas: HTMLCanvasElement;
+  readonly input: Input;
+  renderer!: THREE.WebGLRenderer;
+  readonly camera = new THREE.PerspectiveCamera(60, 1, 0.1, 900);
+  readonly cameraCtl = new CameraController(this.camera);
+
+  // --- Sistemas ---
+  readonly collision = new CollisionWorld();
+  readonly interaction = new InteractionSystem();
+  readonly lights: LightManager;
+  readonly inventory: Inventory;
+  readonly progression: Progression;
+  readonly worldState: WorldState;
+  readonly crafting: CraftingSystem;
+  readonly quests: QuestSystem;
+  readonly saveSystem = new SaveSystem(new LocalStorageProvider());
+  readonly particles = new Particles();
+  readonly player = new Player();
+  world!: World;
+  building!: BuildingSystem;
+  mapRenderer!: MapRenderer;
+  ui!: UIManager;
+
+  // --- Estado ---
+  state: GameState = 'loading';
+  playTime = 0;
+  fps = 60;
+  hasSave = false;
+  currentRegionName = '';
+  stats = { gathered: 0, crafted: 0, built: 0 };
+
+  private elapsed = 0;
+  private lastTime = performance.now();
+  private contextLost = false;
+  private regionTimer = 0;
+  private ambienceTimer = 0;
+  private autosaveTimer = AUTOSAVE_SECONDS;
+  private fpsFrames = 0;
+  private fpsTime = 0;
+  private lowFpsTime = 0;
+  private perfWarned = false;
+  private boundaryCooldown = 0;
+  private blockedCooldown = 0;
+  private torchLight!: LightSource;
+  private hiddenByZone = new Set<THREE.Object3D>();
+  private inCave = false;
+  private unlockIntent = false;
+  private lastUnexpectedUnlock = 0;
+  private lastBuildMode = 'none';
+  private frameErrors = 0;
+  private readonly shadowBlob: THREE.Mesh;
+  private readonly tmpVec = new THREE.Vector3();
+  private readonly interactionCtx: InteractionContext;
+
+  constructor(private readonly container: HTMLElement, private readonly uiRoot: HTMLElement) {
+    this.settings.load();
+    this.canvas = document.createElement('canvas');
+    this.canvas.className = 'game-canvas';
+    this.canvas.setAttribute('aria-label', 'Mundo 3D do jogo');
+    this.container.prepend(this.canvas);
+    this.input = new Input(this.canvas);
+
+    this.lights = new LightManager(this.settings.preset.maxPointLights);
+    this.inventory = new Inventory(this.bus);
+    this.progression = new Progression(this.bus);
+    this.worldState = new WorldState(this.bus);
+    this.crafting = new CraftingSystem(this.bus, () => ({
+      inventory: this.inventory,
+      level: this.progression.level,
+      isNearStation: (s) => this.building.isNearStation(s, this.player.position),
+    }));
+    this.quests = new QuestSystem(this.bus, {
+      level: () => this.progression.level,
+      isRegionDiscovered: (id) => this.worldState.discovered.has(id),
+      structureCount: (t) => this.building?.count(t) ?? 0,
+      hasFlag: (f) => this.worldState.hasFlag(f),
+    });
+    this.interactionCtx = {
+      hasItem: (id: ItemId, amount = 1) => this.inventory.has(id, amount),
+      player: this.player,
+    };
+
+    this.shadowBlob = new THREE.Mesh(
+      new THREE.CircleGeometry(0.55, 18),
+      new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.28, depthWrite: false }),
+    );
+    this.shadowBlob.rotation.x = -Math.PI / 2;
+  }
+
+  get controlMode(): 'desktop' | 'touch' {
+    return this.settings.effectiveControlMode;
+  }
+
+  get isPlaying(): boolean {
+    return this.state === 'playing' && !this.ui.isBlocking();
+  }
+
+  // ===========================================================================
+  // Inicialização
+  // ===========================================================================
+
+  async init(): Promise<void> {
+    this.ui = new UIManager(this.uiRoot, this, this.input);
+    this.ui.setLoading(0.02, 'Iniciando gráficos…');
+    await nextFrame();
+
+    this.createRenderer();
+    this.world = new World(this.collision, this.interaction, this.lights, this.createLandmarkHooks());
+    await this.world.generate(async (fraction, label) => {
+      this.ui.setLoading(fraction, label);
+      await nextFrame();
+    });
+
+    this.building = new BuildingSystem(
+      this.world.terrain,
+      this.collision,
+      this.world.resources,
+      this.lights,
+      this.bus,
+      this.createBuildingHooks(),
+    );
+    this.world.scene.add(this.building.group);
+    this.interaction.addProvider(this.building);
+    this.world.scene.add(this.player.object);
+    this.world.scene.add(this.particles.mesh);
+    this.world.scene.add(this.shadowBlob);
+    this.mapRenderer = new MapRenderer(this.world.terrain);
+
+    this.torchLight = this.lights.add({
+      position: new THREE.Vector3(),
+      color: new THREE.Color('#ffb066'),
+      intensity: 14,
+      distance: 15,
+      flicker: true,
+      nightOnly: false,
+      enabled: false,
+    });
+
+    this.wireEvents();
+    this.wirePlayer();
+    this.wireBrowser();
+    this.applySettings();
+    this.resetWorld();
+
+    this.ui.setLoading(1, 'Pronto!');
+    // Compila os shaders antes de mostrar o menu (evita travadas no início).
+    this.renderer.compile(this.world.scene, this.camera);
+    await nextFrame();
+    this.ui.hideLoading();
+    await this.showMenu();
+    this.lastTime = performance.now();
+    this.renderer.setAnimationLoop(this.frame);
+  }
+
+  private createRenderer(): void {
+    const preset = this.settings.preset;
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: this.canvas,
+      antialias: preset.antialias,
+      powerPreference: 'high-performance',
+      stencil: false,
+    });
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.onResize();
+  }
+
+  // ===========================================================================
+  // Laço principal
+  // ===========================================================================
+
+  private frame = (now: number): void => {
+    if (this.contextLost) return;
+    const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
+    this.lastTime = now;
+    this.elapsed += dt;
+    this.measureFps(dt);
+
+    try {
+      const blocking = this.ui.isBlocking();
+      const simulate = this.state === 'playing' && !blocking;
+      this.input.enabled = simulate;
+
+      let focus: THREE.Vector3;
+      if (this.state === 'playing') {
+        this.updatePlaying(dt, simulate);
+        focus = this.player.position;
+      } else {
+        this.cameraCtl.orbit(this.elapsed, MENU_FOCUS, 120, 55);
+        focus = MENU_FOCUS;
+      }
+      this.world.setMenuView(this.state !== 'playing');
+
+      this.world.update(dt, this.elapsed, focus, this.camera, simulate);
+      this.particles.update(dt);
+      this.lights.update(dt, focus, this.world.dayNight.night);
+      this.audio.update(dt);
+      if (this.state === 'playing') this.ui.update(dt);
+      this.renderer.render(this.world.scene, this.camera);
+      this.frameErrors = 0;
+    } catch (err) {
+      // Um erro isolado não deve congelar o jogo; erros seguidos são avisados.
+      this.frameErrors++;
+      console.error('[Game] erro no quadro', err);
+      if (this.frameErrors === 30) {
+        this.ui.notify.toast('Ocorreu um erro inesperado. Se o jogo travar, recarregue a página.', 'warning');
+      }
+    }
+    this.input.endFrame();
+  };
+
+  private updatePlaying(dt: number, simulate: boolean): void {
+    const input = this.input;
+    const terrain = this.world.terrain;
+    const getHeight = (x: number, z: number) => terrain.getHeight(x, z);
+
+    if (simulate) {
+      this.playTime += dt;
+      const look = input.consumeLook();
+      this.cameraCtl.rotate(look.dx, look.dy);
+      this.cameraCtl.zoom(input.consumeWheel());
+
+      if (input.actionPressed('torch')) this.toggleTorch();
+      // Guardado antes: o mesmo aperto de E que confirma a construção
+      // não deve também usar a construção recém-criada.
+      const placing = this.building.mode === 'place';
+      if (placing) {
+        if (input.actionPressed('rotate')) this.building.rotateGhost();
+        if (input.actionPressed('interact')) this.building.confirmPlacement();
+      }
+
+      this.player.update(
+        dt,
+        {
+          move: input.getMove(),
+          sprint: input.isSprinting(),
+          jump: input.actionPressed('jump'),
+          jumpHeld: input.actionHeld('jump'),
+        },
+        this.cameraCtl.yaw,
+        { getHeight, collision: this.collision },
+      );
+
+      if (!placing && this.building.mode !== 'place') {
+        this.interaction.update(dt, this.interactionCtx, input.actionPressed('interact'), input.actionHeld('interact'));
+      } else {
+        this.interaction.current = null;
+        this.interaction.currentAction = null;
+      }
+      this.world.resources.update(dt, this.playTime, this.player.position);
+      this.updateTimers(dt);
+    } else {
+      input.consumeLook();
+      input.consumeWheel();
+    }
+
+    this.building.update(dt);
+    this.syncBuildMode();
+    this.updateCameraZones();
+    this.cameraCtl.update(dt, this.player.position, getHeight);
+
+    // Marcadores visuais.
+    const target = this.interaction.current;
+    this.world.updateTargetMarker(
+      simulate && target ? target.position : null,
+      this.interaction.currentAction?.enabled ?? true,
+      this.elapsed,
+    );
+    this.world.updateBeacon(this.questTarget(), this.player.position, this.elapsed);
+
+    // Luz da tocha acompanha a mão do personagem.
+    this.torchLight.enabled = this.player.torchOn;
+    if (this.player.torchOn) this.player.rig.torchTip.getWorldPosition(this.torchLight.position);
+
+    // Sombra simples quando as sombras reais estão desligadas.
+    if (this.shadowBlob.visible) {
+      const p = this.player.position;
+      this.shadowBlob.position.set(p.x, terrain.getHeight(p.x, p.z) + 0.04, p.z);
+    }
+
+    // Botão de interação no celular.
+    if (this.controlMode === 'touch') {
+      const action = this.interaction.currentAction;
+      this.ui.touch.setInteraction(action?.label ?? null, action?.enabled ?? false);
+    }
+
+    const lockHint =
+      this.controlMode === 'desktop' && !this.input.pointerLocked && !this.ui.isBlocking() && this.state === 'playing';
+    this.ui.hud.setLockHint(lockHint);
+  }
+
+  /** Tarefas periódicas: regiões, névoa do mapa, áudio ambiente e salvamento automático. */
+  private updateTimers(dt: number): void {
+    const p = this.player.position;
+    this.boundaryCooldown -= dt;
+    this.blockedCooldown -= dt;
+
+    this.regionTimer -= dt;
+    if (this.regionTimer <= 0) {
+      this.regionTimer = 0.4;
+      const region = regionAt(p.x, p.z);
+      const ground = this.world.terrain.getHeight(p.x, p.z);
+      this.currentRegionName = region?.name ?? (ground < -0.5 ? 'Mar aberto' : 'Ilha');
+      if (region && !this.worldState.discovered.has(region.id)) this.worldState.discover(region.id);
+      this.worldState.reveal(p.x, p.z, 24);
+    }
+
+    this.ambienceTimer -= dt;
+    if (this.ambienceTimer <= 0) {
+      this.ambienceTimer = 0.5;
+      const ground = this.world.terrain.getHeight(p.x, p.z);
+      const coast = 1 - smoothstep(1.5, 9, ground);
+      const altitude = smoothstep(10, 40, p.y);
+      this.audio.setAmbience(1 - this.world.dayNight.night, coast, altitude, this.inCave);
+    }
+
+    this.autosaveTimer -= dt;
+    if (this.autosaveTimer <= 0) void this.saveGame(false);
+  }
+
+  private measureFps(dt: number): void {
+    this.fpsFrames++;
+    this.fpsTime += dt;
+    if (this.fpsTime >= 0.5) {
+      this.fps = this.fpsFrames / this.fpsTime;
+      this.fpsFrames = 0;
+      this.fpsTime = 0;
+      // Sugere reduzir a qualidade se o jogo estiver lento por muito tempo.
+      if (this.state === 'playing' && !this.perfWarned && this.settings.data.quality !== 'baixa') {
+        this.lowFpsTime = this.fps < 24 ? this.lowFpsTime + 0.5 : Math.max(0, this.lowFpsTime - 0.5);
+        if (this.lowFpsTime > 8) {
+          this.perfWarned = true;
+          this.ui.notify.toast('O jogo parece lento neste aparelho. Experimente a qualidade "Baixa" em Opções.', 'warning');
+        }
+      }
+    }
+  }
+
+  /** Câmera mais próxima e teto escondido dentro da caverna e das cabanas. */
+  private updateCameraZones(): void {
+    const p = this.player.position;
+    let limit = Infinity;
+    const toHide = new Set<THREE.Object3D>();
+    this.inCave = false;
+    for (const zone of [...this.world.landmarks.cameraZones, ...this.building.cameraZones]) {
+      if (Math.hypot(p.x - zone.x, p.z - zone.z) < zone.radius) {
+        limit = Math.min(limit, zone.maxDistance);
+        for (const o of zone.hide ?? []) toHide.add(o);
+        if (zone.x === PLACES.cave.x && zone.z === PLACES.cave.z) this.inCave = true;
+      }
+    }
+    for (const o of this.hiddenByZone) if (!toHide.has(o)) o.visible = true;
+    for (const o of toHide) o.visible = false;
+    this.hiddenByZone = toHide;
+    this.cameraCtl.distanceLimit = limit;
+  }
+
+  private syncBuildMode(): void {
+    const mode = this.building.mode;
+    if (mode === this.lastBuildMode) return;
+    this.lastBuildMode = mode;
+    this.interaction.filter = mode === 'remove' ? (item) => item.id.startsWith('remover:') : null;
+    this.ui.touch.setBuildMode(mode !== 'none', mode === 'remove');
+  }
+
+  // ===========================================================================
+  // Eventos
+  // ===========================================================================
+
+  private wireEvents(): void {
+    const bus = this.bus;
+    const ui = this.ui;
+
+    bus.on('inventory:changed', ({ itemId }) => {
+      ui.hud.markResourcesDirty();
+      ui.refresh('inventario');
+      ui.refresh('fabricacao');
+      ui.refresh('construcao');
+      if (itemId === 'tocha') this.ui.touch.setTorchAvailable(this.inventory.has('tocha'), this.player.torchOn);
+    });
+    bus.on('resource:gathered', ({ amount }) => (this.stats.gathered += amount));
+    bus.on('item:crafted', () => this.stats.crafted++);
+    bus.on('level:up', ({ level }) => {
+      this.player.maxEnergy = this.progression.maxEnergy;
+      this.player.energy = this.player.maxEnergy;
+      this.audio.play('levelup');
+      ui.notify.banner(`Nível ${level}`, 'Você subiu de nível! Energia máxima aumentou.', 'estrela', 'level');
+      const unlocked = [
+        ...RECIPES.filter((r) => r.minLevel === level).map((r) => ITEMS[r.result].name),
+        ...Object.values(STRUCTURES)
+          .filter((s) => s.minLevel === level)
+          .map((s) => s.name),
+      ];
+      if (unlocked.length) ui.notify.toast(`Desbloqueado: ${unlocked.join(', ')}`, 'success', 'estrela');
+    });
+    bus.on('quest:started', ({ questId }) => {
+      const q = this.quests.getDef(questId);
+      if (q) ui.notify.toast(`Nova missão: ${q.title}`, 'quest');
+      ui.hud.markQuestsDirty();
+      ui.refresh('missoes');
+    });
+    bus.on('quest:progress', () => {
+      ui.hud.markQuestsDirty();
+      ui.refresh('missoes');
+    });
+    bus.on('quest:completed', ({ questId }) => {
+      const q = this.quests.getDef(questId);
+      if (!q) return;
+      this.audio.play('quest');
+      ui.notify.banner(q.title, 'Missão concluída!', 'missao', 'quest');
+      if (q.completeText) ui.notify.toast(q.completeText, 'info', 'estrela');
+      ui.hud.markQuestsDirty();
+      ui.refresh('missoes');
+      this.autosaveTimer = Math.min(this.autosaveTimer, 2);
+    });
+    bus.on('region:discovered', ({ regionId }) => {
+      const region = getRegion(regionId);
+      this.audio.play('discover');
+      ui.notify.banner(region.name, 'Região descoberta', 'mapa', 'region');
+      this.progression.addXP(25);
+    });
+    bus.on('structure:built', () => {
+      this.stats.built++;
+      ui.hud.markQuestsDirty();
+      this.autosaveTimer = Math.min(this.autosaveTimer, 2);
+    });
+    bus.on('flag:set', () => ui.hud.markQuestsDirty());
+    bus.on('notify', ({ text, kind, icon: ic }) => ui.notify.toast(text, kind, ic));
+
+    this.quests.onReward = (rewards) => {
+      this.progression.addXP(rewards.xp);
+      if (rewards.items) this.giveItems(rewards.items, true);
+    };
+
+    this.world.resources.onHit = (r) => {
+      this.inventory.add(r.item, r.amount);
+      this.bus.emit('resource:gathered', { itemId: r.item, amount: r.amount });
+      this.ui.notify.itemPopup(r.item, r.amount);
+      if (r.bonus) {
+        this.inventory.add(r.bonus, 1);
+        this.bus.emit('resource:gathered', { itemId: r.bonus, amount: 1 });
+        this.ui.notify.itemPopup(r.bonus, 1);
+      }
+      this.progression.addXP(r.node.def.xp);
+      const tall = r.node.stumpIndex >= 0;
+      this.particles.burst(
+        this.tmpVec.set(r.node.x, r.node.y + (tall ? 1.3 : 0.6), r.node.z),
+        r.node.def.particleColor,
+        r.depleted ? 16 : 7,
+      );
+      this.audio.play(r.node.def.sound, 0.9 + Math.random() * 0.2);
+      this.player.playAction(r.toolUsed);
+      if (r.depleted && tall) window.setTimeout(() => this.audio.play('land'), 1100);
+    };
+
+    this.interaction.onBlocked = (reason) => {
+      if (this.blockedCooldown > 0) return;
+      this.blockedCooldown = 1;
+      this.audio.play('error');
+      ui.notify.toast(reason, 'warning');
+    };
+
+    this.ui.onBlockingChange = () => this.onBlockingChange();
+  }
+
+  private wirePlayer(): void {
+    const p = this.player;
+    p.onStep = (surface) => {
+      const pitch = { sand: 0.8, grass: 1, rock: 1.5, water: 0.55 }[surface];
+      this.audio.play('step', pitch * (0.9 + Math.random() * 0.2));
+    };
+    p.onJump = () => this.audio.play('jump');
+    p.onLand = (impact) => {
+      this.audio.play('land');
+      if (impact > 0.35) this.particles.burst(this.tmpVec.copy(p.position).setY(p.position.y + 0.1), '#d8c7a0', 8, { up: 1.5, speed: 2 });
+    };
+    p.onSplash = () => {
+      this.audio.play('splash');
+      this.particles.burst(this.tmpVec.copy(p.position), '#bff4ff', 14, { up: 4, speed: 2.5 });
+    };
+    p.onBoundary = () => {
+      if (this.boundaryCooldown > 0) return;
+      this.boundaryCooldown = 5;
+      this.ui.notify.toast('O oceano é vasto demais para nadar. Volte para a ilha!', 'warning');
+    };
+  }
+
+  private wireBrowser(): void {
+    // Atalhos de teclado.
+    this.input.onKeyDown = (code) => this.handleKey(code);
+
+    // Captura do mouse (Pointer Lock) ao clicar no jogo.
+    this.canvas.addEventListener('click', () => {
+      this.audio.unlock();
+      if (this.state === 'playing' && this.controlMode === 'desktop' && !this.ui.isBlocking()) this.requestLock();
+    });
+    document.addEventListener('pointerlockchange', () => {
+      const locked = document.pointerLockElement === this.canvas;
+      // A captura é assíncrona: se um menu abriu enquanto ela era concedida, solta de novo.
+      if (locked && (this.state !== 'playing' || this.ui.isBlocking() || this.controlMode !== 'desktop')) {
+        this.unlockIntent = true;
+        document.exitPointerLock();
+        return;
+      }
+      this.input.pointerLocked = locked;
+      // Alguns navegadores geram um "salto" de movimento logo após capturar o mouse.
+      if (locked) this.input.ignoreLookFor(150);
+      if (!locked && !this.unlockIntent && this.state === 'playing' && !this.ui.isBlocking()) {
+        // O jogador apertou Esc (o navegador libera o mouse): abre a pausa.
+        this.lastUnexpectedUnlock = performance.now();
+        this.ui.openPanel('pausa');
+      }
+      this.unlockIntent = false;
+    });
+    document.addEventListener('pointerlockerror', () => {
+      this.input.pointerLocked = false;
+    });
+
+    // Redimensionamento e orientação.
+    window.addEventListener('resize', () => this.onResize());
+    window.visualViewport?.addEventListener('resize', () => this.onResize());
+    window.addEventListener('orientationchange', () => window.setTimeout(() => this.onResize(), 250));
+
+    // Aba em segundo plano: pausa o áudio e salva.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        this.audio.suspend();
+        this.input.reset();
+        this.ui.touch.releaseAll();
+        if (this.state === 'playing') void this.saveGame(false);
+      } else {
+        this.audio.resume();
+        this.lastTime = performance.now();
+      }
+    });
+    window.addEventListener('pagehide', () => {
+      if (this.state === 'playing') void this.saveGame(false);
+    });
+
+    // Perda do contexto WebGL (comum em celulares com pouca memória).
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+      this.ui.showContextLost(true);
+      if (this.state === 'playing') void this.saveGame(false);
+    });
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      this.ui.showContextLost(false);
+      this.applySettings();
+      this.lastTime = performance.now();
+      this.ui.notify.toast('Gráficos restaurados!', 'success');
+    });
+
+    // Áudio só pode começar depois de um toque/clique.
+    const unlockAudio = () => this.audio.unlock();
+    window.addEventListener('pointerdown', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+
+    // Configurações alteradas no menu de opções.
+    this.settings.onChange((_data, key) => {
+      if (key === 'quality') this.applyGraphics();
+      else this.applyGameplaySettings();
+    });
+  }
+
+  private handleKey(code: string): void {
+    if (this.state !== 'playing') {
+      if (code === 'Escape' && this.ui.activePanel) this.ui.closePanel();
+      return;
+    }
+    if (this.ui.dialogs.isOpen) return;
+    switch (code) {
+      case 'Escape':
+        // Ignora o Esc que o navegador usou para liberar o mouse.
+        if (performance.now() - this.lastUnexpectedUnlock < 250) return;
+        if (this.ui.activePanel) this.ui.closePanel();
+        else if (this.building.mode !== 'none') this.cancelBuild();
+        else this.ui.openPanel('pausa');
+        break;
+      case 'KeyI':
+      case 'Tab':
+        this.ui.togglePanel('inventario');
+        break;
+      case 'KeyC':
+        this.ui.togglePanel('fabricacao');
+        break;
+      case 'KeyB':
+        if (this.building.mode !== 'none') this.cancelBuild();
+        this.ui.togglePanel('construcao');
+        break;
+      case 'KeyM':
+        this.ui.togglePanel('mapa');
+        break;
+      case 'KeyJ':
+      case 'KeyL':
+        this.ui.togglePanel('missoes');
+        break;
+      case 'KeyP':
+        this.ui.togglePanel('pausa');
+        break;
+    }
+  }
+
+  /** Painéis abrem/fecham: solta o mouse ou tenta capturá-lo de novo. */
+  private onBlockingChange(): void {
+    const blocking = this.ui.isBlocking();
+    if (blocking) {
+      this.input.reset();
+      this.ui.touch.releaseAll();
+      if (document.pointerLockElement === this.canvas) {
+        this.unlockIntent = true;
+        document.exitPointerLock();
+      }
+    } else if (this.state === 'playing' && this.controlMode === 'desktop') {
+      this.requestLock();
+    }
+  }
+
+  private requestLock(): void {
+    if (document.pointerLockElement === this.canvas) return;
+    try {
+      const result = this.canvas.requestPointerLock() as unknown as Promise<void> | undefined;
+      // Alguns navegadores retornam uma Promise que pode falhar (sem gesto do usuário).
+      result?.catch?.(() => undefined);
+    } catch {
+      /* sem suporte: o jogador pode arrastar com o mouse */
+    }
+  }
+
+  private onResize(): void {
+    if (!this.renderer) return;
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.settings.preset.pixelRatioCap));
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / Math.max(1, h);
+    // Telas em pé: campo de visão maior para enxergar os lados.
+    this.camera.fov = this.camera.aspect < 1 ? 72 : 60;
+    this.camera.updateProjectionMatrix();
+    this.ui?.updatePortraitHint(this.state === 'playing');
+  }
+
+  /** Aplica todas as opções (gráficos, controles, áudio e duração do dia). */
+  applySettings(): void {
+    this.applyGraphics();
+    this.applyGameplaySettings();
+  }
+
+  /** Qualidade gráfica: sombras, resolução, distância de visão, vegetação e luzes. */
+  private applyGraphics(): void {
+    const preset = this.settings.preset;
+    this.renderer.shadowMap.enabled = preset.shadows;
+    this.world.setShadows(preset.shadows, preset.shadowMapSize);
+    this.world.setRenderDistance(preset.renderDistance);
+    this.world.decorations.setDensity(preset.decorationDensity);
+    this.lights.setCount(preset.maxPointLights);
+    this.shadowBlob.visible = !preset.shadows;
+    // Materiais precisam ser recompilados quando as sombras mudam.
+    this.world.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh && mesh.material) {
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) m.needsUpdate = true;
+      }
+    });
+    this.onResize();
+  }
+
+  /** Controles, áudio e duração do dia (não exigem recompilar materiais). */
+  private applyGameplaySettings(): void {
+    const s = this.settings.data;
+    this.cameraCtl.sensitivity = s.sensitivity;
+    this.cameraCtl.invertY = s.invertY;
+    this.audio.setVolumes(s);
+    this.world.dayNight.dayLengthSeconds = DAY_LENGTH_SECONDS[s.dayLength];
+    this.ui.setControlMode(this.controlMode, this.state === 'playing');
+    if (this.controlMode === 'touch' && document.pointerLockElement) {
+      this.unlockIntent = true;
+      document.exitPointerLock();
+    }
+  }
+
+  // ===========================================================================
+  // Fluxo do jogo (menu, novo jogo, continuar, salvar)
+  // ===========================================================================
+
+  private async showMenu(): Promise<void> {
+    this.state = 'menu';
+    const summary = await this.saveSystem.summary();
+    this.hasSave = summary !== null;
+    this.world.dayNight.setTime(16.8);
+    this.world.questBeacon.visible = false;
+    this.world.targetMarker.visible = false;
+    this.ui.setControlMode(this.controlMode, false);
+    this.ui.showMainMenu(summary, this.saveSystem.persistent);
+    if (this.saveSystem.lastError && !summary) this.ui.notify.toast(this.saveSystem.lastError, 'warning');
+  }
+
+  async newGameFromMenu(): Promise<void> {
+    if (this.hasSave) {
+      const ok = await this.ui.dialogs.confirm({
+        title: 'Começar um novo jogo?',
+        message: 'Já existe um progresso salvo. Ao começar de novo, ele será substituído.',
+        confirmText: 'Começar do zero',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    await this.startNewGame();
+  }
+
+  async startNewGame(): Promise<void> {
+    this.resetWorld();
+    this.enterPlaying();
+    await this.saveGame(false);
+    const touch = this.controlMode === 'touch';
+    await this.ui.dialogs.custom(
+      `
+      <div class="welcome">
+        <div class="welcome-icon">${icon('bussola')}</div>
+        <h2>Bem-vindo(a) à ilha!</h2>
+        <p>Uma tempestade misteriosa destruiu seu barco. Você acordou numa praia desconhecida, com nada além da roupa do corpo.
+        Explore, colete recursos, construa um abrigo e descubra os segredos dos <b>Lumeni</b>, a civilização que desapareceu daqui.</p>
+        <ul class="welcome-controls">
+          ${
+            touch
+              ? `<li><b>Joystick esquerdo</b> andar (na borda, corre)</li>
+                 <li><b>Arraste à direita</b> girar a câmera</li>
+                 <li><b>Botão de mão</b> coletar e interagir</li>
+                 <li><b>Ícones no topo</b> inventário, fabricação, construção, mapa</li>`
+              : `<li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> andar · <kbd>Shift</kbd> correr · <kbd>Espaço</kbd> pular</li>
+                 <li><b>Clique na tela</b> e use o mouse para girar a câmera</li>
+                 <li><kbd>E</kbd> coletar e interagir (segure para repetir)</li>
+                 <li><kbd>I</kbd> inventário · <kbd>C</kbd> fabricar · <kbd>B</kbd> construir · <kbd>M</kbd> mapa</li>`
+          }
+        </ul>
+        <p class="muted">Siga o <b>feixe de luz dourado</b> para encontrar o objetivo da missão.</p>
+      </div>`,
+      'Começar a aventura',
+    );
+  }
+
+  async continueGame(): Promise<void> {
+    const data = await this.saveSystem.load();
+    if (!data) {
+      this.ui.notify.toast(this.saveSystem.lastError ?? 'Nenhum salvamento encontrado.', 'warning');
+      await this.showMenu();
+      return;
+    }
+    this.resetWorld();
+    this.applySave(data);
+    this.enterPlaying();
+    this.ui.notify.toast('Bem-vindo(a) de volta à ilha!', 'success', 'bussola');
+  }
+
+  private enterPlaying(): void {
+    this.state = 'playing';
+    this.ui.closeAll();
+    this.ui.notify.clear();
+    this.ui.hideMainMenu();
+    this.ui.hud.setVisible(true);
+    this.ui.setControlMode(this.controlMode, true);
+    this.ui.touch.setTorchAvailable(this.inventory.has('tocha'), this.player.torchOn);
+    this.cameraCtl.snapBehind(this.player.yaw);
+    this.cameraCtl.pitch = 0.32;
+    this.autosaveTimer = AUTOSAVE_SECONDS;
+    this.regionTimer = 0.6;
+    this.lastBuildMode = '';
+    this.ui.updatePortraitHint(true);
+  }
+
+  /** Coloca o mundo no estado inicial (novo jogo). */
+  private resetWorld(): void {
+    this.building.cancel();
+    this.interaction.filter = null;
+    this.worldState.reset();
+    this.inventory.load({});
+    this.progression.load({ xp: 0 });
+    this.building.clear();
+    this.world.resources.load(undefined);
+    this.world.landmarks.applyFlags();
+    this.quests.reset();
+    this.world.dayNight.day = 1;
+    this.world.dayNight.setTime(8);
+    this.playTime = 0;
+    this.stats = { gathered: 0, crafted: 0, built: 0 };
+    const spawn = PLACES.spawn;
+    this.player.maxEnergy = this.progression.maxEnergy;
+    this.player.energy = this.player.maxEnergy;
+    this.player.torchOn = false;
+    this.player.buffTime = 0;
+    this.player.teleport(spawn.x, this.world.terrain.getHeight(spawn.x, spawn.z), spawn.z, Math.PI);
+    this.currentRegionName = '';
+    this.ui.hud.markQuestsDirty();
+    this.ui.hud.markResourcesDirty();
+  }
+
+  private applySave(data: SaveData): void {
+    this.worldState.load({ flags: data.world.flags, regions: data.world.regions, explored: data.world.explored });
+    this.inventory.load(data.inventory);
+    this.progression.load(data.progression);
+    this.building.load(data.structures);
+    this.world.resources.load(data.world.nodes);
+    this.world.landmarks.applyFlags();
+    this.quests.load(data.quests);
+    this.quests.evaluateAll();
+    this.world.dayNight.day = Math.max(1, Math.floor(data.world.day));
+    this.world.dayNight.setTime(data.world.time);
+    this.playTime = data.playTime;
+    this.stats = { ...data.stats };
+    const p = data.player;
+    this.player.maxEnergy = this.progression.maxEnergy;
+    const ground = this.world.terrain.getHeight(p.x, p.z);
+    this.player.teleport(p.x, Math.max(p.y, ground), p.z, p.yaw);
+    this.player.energy = clamp(p.energy, 0, this.player.maxEnergy);
+    this.player.torchOn = p.torch && this.inventory.has('tocha');
+    this.player.buffTime = p.buffTime;
+  }
+
+  private createSaveData(): SaveData {
+    const p = this.player;
+    return {
+      version: SAVE_VERSION,
+      savedAt: Date.now(),
+      playTime: this.playTime,
+      player: {
+        x: p.position.x,
+        y: p.position.y,
+        z: p.position.z,
+        yaw: p.yaw,
+        energy: p.energy,
+        torch: p.torchOn,
+        buffTime: p.buffTime,
+      },
+      inventory: this.inventory.toJSON(),
+      progression: this.progression.toJSON(),
+      quests: this.quests.toJSON(),
+      structures: this.building.toJSON(),
+      world: {
+        time: this.world.dayNight.hour,
+        day: this.world.dayNight.day,
+        flags: [...this.worldState.flags],
+        regions: [...this.worldState.discovered],
+        explored: this.worldState.exploredToBase64(),
+        nodes: this.world.resources.toJSON(),
+      },
+      stats: { ...this.stats },
+    };
+  }
+
+  async saveGame(manual: boolean): Promise<boolean> {
+    if (this.state !== 'playing') return false;
+    this.autosaveTimer = AUTOSAVE_SECONDS;
+    const ok = await this.saveSystem.save(this.createSaveData());
+    if (ok) this.hasSave = true;
+    this.ui.hud.showSaving();
+    if (manual) {
+      this.audio.play(ok ? 'craft' : 'error');
+      this.ui.notify.toast(ok ? 'Jogo salvo!' : (this.saveSystem.lastError ?? 'Falha ao salvar.'), ok ? 'success' : 'warning', 'salvar');
+    }
+    return ok;
+  }
+
+  async returnToMenu(): Promise<void> {
+    await this.saveGame(false);
+    this.leaveToMenu();
+  }
+
+  private leaveToMenu(): void {
+    this.building.cancel();
+    this.ui.closeAll();
+    this.ui.notify.clear();
+    this.state = 'menu';
+    if (document.pointerLockElement) {
+      this.unlockIntent = true;
+      document.exitPointerLock();
+    }
+    void this.showMenu();
+  }
+
+  async confirmDeleteSave(): Promise<void> {
+    const ok = await this.ui.dialogs.confirm({
+      title: 'Apagar salvamento?',
+      message:
+        'Todo o progresso (inventário, construções, missões e mapa explorado) será apagado permanentemente. Esta ação não pode ser desfeita.',
+      confirmText: 'Apagar tudo',
+      danger: true,
+    });
+    if (!ok) return;
+    await this.saveSystem.delete();
+    this.hasSave = false;
+    this.ui.notify.toast('Salvamento apagado.', 'info', 'lixeira');
+    if (this.state === 'playing') {
+      this.leaveToMenu();
+    } else {
+      this.ui.refresh('opcoes');
+      await this.showMenu();
+    }
+  }
+
+  // ===========================================================================
+  // Ações usadas pela interface
+  // ===========================================================================
+
+  craft(recipeId: string): void {
+    const result = this.crafting.craft(recipeId);
+    const recipe = getRecipe(recipeId);
+    if (result.ok && recipe) {
+      this.audio.play('craft');
+      this.progression.addXP(recipe.xp);
+      this.ui.notify.toast(`Fabricado: ${ITEMS[recipe.result].name}`, 'success', ITEMS[recipe.result].icon);
+      this.particles.burst(this.tmpVec.copy(this.player.position).setY(this.player.position.y + 1.2), '#ffd166', 10);
+    } else {
+      this.audio.play('error');
+      this.ui.notify.toast(result.reason ?? 'Não foi possível fabricar.', 'warning');
+    }
+  }
+
+  useItem(id: ItemId): void {
+    const def = ITEMS[id];
+    if (!def.food) return;
+    if (this.player.energy >= this.player.maxEnergy - 0.5 && !def.food.buffSeconds) {
+      this.ui.notify.toast('Sua energia já está cheia.', 'info', 'raio');
+      return;
+    }
+    if (!this.inventory.remove(id, 1)) return;
+    this.player.eat(def.food.energy, def.food.buffSeconds);
+    this.bus.emit('item:used', { itemId: id });
+    this.audio.play('eat');
+    const extra = def.food.buffSeconds ? ' Você está bem alimentado!' : '';
+    this.ui.notify.toast(`Você comeu: ${def.name} (+${def.food.energy} energia).${extra}`, 'success', def.icon);
+  }
+
+  toggleTorch(): void {
+    if (!this.inventory.has('tocha')) {
+      this.ui.notify.toast('Você ainda não tem uma tocha. Fabrique uma no menu de fabricação.', 'info', 'tocha');
+      return;
+    }
+    this.player.torchOn = !this.player.torchOn;
+    this.audio.play(this.player.torchOn ? 'open' : 'close');
+    this.ui.touch.setTorchAvailable(true, this.player.torchOn);
+    this.ui.refresh('inventario');
+  }
+
+  startBuild(type: StructureId): void {
+    this.ui.closeAll();
+    if (this.building.startPlacement(type)) {
+      const hint =
+        this.controlMode === 'touch'
+          ? 'Ande para posicionar. Use Girar e Construir.'
+          : 'Ande para posicionar · R gira · E constrói · Esc cancela';
+      this.ui.notify.toast(hint, 'info', STRUCTURES[type].icon);
+    }
+  }
+
+  startRemoval(): void {
+    this.ui.closeAll();
+    this.building.startRemoval();
+    this.ui.notify.toast('Aponte para uma construção e interaja para removê-la.', 'info', 'remover');
+  }
+
+  cancelBuild(): void {
+    this.building.cancel();
+  }
+
+  /** Objetivo da missão acompanhada (para o feixe de luz e o mapa). */
+  questTarget(): { x: number; z: number } | null {
+    const quest = this.quests.tracked;
+    return quest?.target ?? null;
+  }
+
+  /** Dados para desenhar o mapa e o minimapa. */
+  mapView(full = false): MapView {
+    const markers: MapMarker[] = [];
+    for (const s of this.building.structures) markers.push({ x: s.x, z: s.z, type: 'structure' });
+    const ws = this.worldState;
+    const landmarks = [PLACES.monolith, PLACES.cave, PLACES.peak, PLACES.giantTree, PLACES.shipwreck];
+    for (const l of landmarks) if (ws.isExplored(l.x, l.z)) markers.push({ x: l.x, z: l.z, type: 'landmark' });
+    const chests: Array<[string, { x: number; z: number }]> = [
+      ['bau_praia', PLACES.chestBeach],
+      ['bau_floresta', PLACES.chestForest],
+      ['bau_caverna', PLACES.chestCave],
+    ];
+    for (const [flag, pos] of chests) {
+      if (!ws.hasFlag(flag) && ws.isExplored(pos.x, pos.z)) markers.push({ x: pos.x, z: pos.z, type: 'chest' });
+    }
+    const target = this.questTarget();
+    if (target) markers.push({ x: target.x, z: target.z, type: 'quest' });
+    return {
+      playerX: this.player.position.x,
+      playerZ: this.player.position.z,
+      playerYaw: this.player.yaw,
+      cameraYaw: full ? 0 : this.cameraCtl.yaw,
+      markers,
+    };
+  }
+
+  // ===========================================================================
+  // Ganchos (callbacks) para os marcos do mundo e as construções
+  // ===========================================================================
+
+  private giveItems(bundle: ItemBundle, asReward = false): void {
+    this.inventory.addAll(bundle);
+    const parts = Object.entries(bundle).map(([id, n]) => `${n} ${ITEMS[id as ItemId].name}`);
+    if (parts.length) this.ui.notify.toast(`${asReward ? 'Recompensa' : 'Você recebeu'}: ${parts.join(', ')}`, 'item', 'mochila');
+  }
+
+  private createLandmarkHooks() {
+    return {
+      hasFlag: (f: string) => this.worldState.hasFlag(f),
+      setFlag: (f: string) => this.worldState.setFlag(f),
+      hasItems: (b: ItemBundle) => this.inventory.hasAll(b),
+      takeItems: (b: ItemBundle) => this.inventory.removeAll(b),
+      giveItems: (b: ItemBundle) => this.giveItems(b),
+      showLore: (key: string) => {
+        const entry = LORE[key];
+        if (entry) void this.ui.dialogs.lore(entry);
+      },
+      sound: (name: Parameters<AudioManager['play']>[0]) => this.audio.play(name),
+      burst: (pos: THREE.Vector3, color: string, count: number) => this.particles.burst(pos, color, count, { up: 4, speed: 3 }),
+      notify: (text: string, kind?: Parameters<UIManager['notify']['toast']>[1]) => this.ui.notify.toast(text, kind),
+      addXP: (n: number) => this.progression.addXP(n),
+      onEnding: () => void this.showEnding(),
+    };
+  }
+
+  private createBuildingHooks() {
+    return {
+      inventory: this.inventory,
+      level: () => this.progression.level,
+      addXP: (n: number) => this.progression.addXP(n),
+      notify: (text: string, kind?: Parameters<UIManager['notify']['toast']>[1]) => this.ui.notify.toast(text, kind),
+      sound: (name: Parameters<AudioManager['play']>[0]) => this.audio.play(name),
+      burst: (pos: THREE.Vector3, color: string, count: number) => this.particles.burst(pos, color, count),
+      isNight: () => this.world.dayNight.isNight,
+      sleep: () => void this.sleep(),
+      rest: () => this.rest(),
+      openCrafting: (station: 'bancada' | 'fogueira') => {
+        this.ui.panels.fabricacao.focusStation = station;
+        this.ui.openPanel('fabricacao');
+      },
+      playerPosition: () => this.player.position,
+      playerYaw: () => this.player.yaw,
+    };
+  }
+
+  private async sleep(): Promise<void> {
+    await this.ui.fade(() => {
+      const nextDay = this.world.dayNight.hour >= 7;
+      this.world.dayNight.setTime(7, nextDay);
+      this.player.energy = this.player.maxEnergy;
+    }, 900);
+    await this.saveGame(false);
+    this.ui.notify.toast(`Você dormiu bem. Bom dia! (Dia ${this.world.dayNight.day})`, 'success', 'sol');
+  }
+
+  private rest(): void {
+    this.player.energy = this.player.maxEnergy;
+    void this.saveGame(true);
+    this.ui.notify.toast('Você descansou: energia restaurada. (À noite, a cama permite dormir até o amanhecer.)', 'success', 'raio');
+  }
+
+  private async showEnding(): Promise<void> {
+    await this.ui.dialogs.lore(LORE.farol);
+    await this.ui.dialogs.custom(
+      `
+      <div class="ending">
+        <div class="welcome-icon">${icon('estrela')}</div>
+        <h2>Fim da primeira jornada</h2>
+        <p>Você reacendeu o farol dos Lumeni e desvendou o segredo da ilha. Obrigado por jogar <b>Além do Horizonte</b>!</p>
+        <div class="pause-stats">
+          <div><span>Nível</span><b>${this.progression.level}</b></div>
+          <div><span>Dias</span><b>${this.world.dayNight.day}</b></div>
+          <div><span>Recursos coletados</span><b>${this.stats.gathered}</b></div>
+          <div><span>Construções</span><b>${this.stats.built}</b></div>
+          <div><span>Ilha explorada</span><b>${Math.round(this.worldState.exploredPercent * 100)}%</b></div>
+        </div>
+        <p class="muted">Novas regiões além do horizonte chegarão em futuras atualizações. Você pode continuar explorando e construindo!</p>
+      </div>`,
+      'Continuar explorando',
+    );
+    await this.saveGame(false);
+  }
+}
