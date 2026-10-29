@@ -165,7 +165,7 @@ export class BuildingSystem implements InteractableProvider {
 
   rotateGhost(): void {
     this.ghostRot = this.snapAngle(this.ghostRot + Math.PI / 4);
-    this.hooks.sound('click');
+    this.hooks.sound('rotate');
   }
 
   /** Confirma a construção no local do fantasma. */
@@ -318,7 +318,10 @@ export class BuildingSystem implements InteractableProvider {
     const world = (lx: number, lz: number) => ({ x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos });
     const box = (lx: number, lz: number, hw: number, hd: number, top: number) => {
       const c = world(lx, lz);
-      structure.colliders.push(this.collision.add({ kind: 'box', x: c.x, z: c.z, hw, hd, rot, top: y + top, tag: structure.id }));
+      // Paredes altas também bloqueiam a câmera.
+      structure.colliders.push(
+        this.collision.add({ kind: 'box', x: c.x, z: c.z, hw, hd, rot, top: y + top, tag: structure.id, camera: top > 2 }),
+      );
     };
     const circle = (r: number, top: number) => {
       structure.colliders.push(this.collision.add({ kind: 'circle', x, z, r, top: y + top, tag: structure.id }));
@@ -425,7 +428,7 @@ export class BuildingSystem implements InteractableProvider {
         .map(([id, n]) => `${n} ${ITEMS[id as ItemId].name}`)
         .join(', ');
       this.hooks.notify(`${structure.def.name} removida${text ? ` (+${text})` : ''}`, 'info');
-      this.hooks.sound('build');
+      this.hooks.sound('remove');
       this.hooks.burst(new THREE.Vector3(structure.x, structure.y + 0.6, structure.z), '#c9a46a', 16);
       this.bus.emit('structure:removed', { type: structure.type, id: structure.id });
     }

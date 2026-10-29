@@ -17,6 +17,8 @@ export interface CircleCollider {
   /** Base do obstáculo (abaixo disso ele não bloqueia; útil para tetos). */
   bottom?: number;
   tag?: string;
+  /** Bloqueia a câmera (paredes e rochas grandes; árvores comuns não). */
+  camera?: boolean;
 }
 
 export interface BoxCollider {
@@ -30,6 +32,7 @@ export interface BoxCollider {
   top: number;
   bottom?: number;
   tag?: string;
+  camera?: boolean;
 }
 
 export type Collider = CircleCollider | BoxCollider;
@@ -187,6 +190,19 @@ export class CollisionWorld {
     }
     return false;
   }
+
+  /** Verdadeiro se o ponto está dentro de um obstáculo que bloqueia a câmera. */
+  blocksCamera(x: number, y: number, z: number): boolean {
+    for (const c of this.query(x, z, 0.5, this.cameraScratch)) {
+      if (!c.camera || y > c.top || y < (c.bottom ?? -Infinity)) continue;
+      if (c.kind === 'circle' ? Math.hypot(x - c.x, z - c.z) < c.r : circleOverlapsBox(x, z, 0.15, c.x, c.z, c.hw, c.hd, c.rot)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private cameraScratch: Collider[] = [];
 
   /** Lança um "raio" horizontal e verifica se bate em algo (para a câmera). */
   segmentBlocked(ax: number, az: number, bx: number, bz: number, y: number): boolean {

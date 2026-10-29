@@ -8,6 +8,7 @@ import { safeStorage } from './storage';
 export type Quality = 'baixa' | 'media' | 'alta';
 export type ControlMode = 'auto' | 'desktop' | 'touch';
 export type DayLength = 'curto' | 'normal' | 'longo';
+export type CharacterLook = 'explorador' | 'robo';
 
 export interface SettingsData {
   quality: Quality;
@@ -22,6 +23,8 @@ export interface SettingsData {
   volumeAmbient: number;
   volumeMusic: number;
   dayLength: DayLength;
+  /** Aparência do personagem. */
+  character: CharacterLook;
 }
 
 /** Parâmetros técnicos de cada nível de qualidade. */
@@ -96,6 +99,7 @@ function defaultSettings(): SettingsData {
     volumeAmbient: 0.6,
     volumeMusic: 0.4,
     dayLength: 'normal',
+    character: 'explorador',
   };
 }
 

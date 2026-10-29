@@ -1,7 +1,7 @@
 /**
  * Opções: qualidade gráfica, controles, áudio e dados salvos.
  */
-import { QUALITY_PRESETS, type ControlMode, type DayLength, type Quality, type SettingsData } from '../../core/Settings';
+import { QUALITY_PRESETS, type CharacterLook, type ControlMode, type DayLength, type Quality, type SettingsData } from '../../core/Settings';
 import type { Game } from '../../game/Game';
 import { escapeHtml } from '../dom';
 import { icon } from '../icons';
@@ -18,6 +18,10 @@ const CONTROL_OPTIONS: Option<ControlMode>[] = [
   { value: 'auto', label: 'Automático' },
   { value: 'desktop', label: 'Computador' },
   { value: 'touch', label: 'Toque' },
+];
+const CHARACTER_OPTIONS: Option<CharacterLook>[] = [
+  { value: 'explorador', label: 'Explorador' },
+  { value: 'robo', label: 'Robô' },
 ];
 const DAY_OPTIONS: Option<DayLength>[] = [
   { value: 'curto', label: 'Curto (6 min)' },
@@ -94,6 +98,7 @@ export class SettingsPanel extends Panel {
         <label class="setting"><span>Música</span>${range('volumeMusic', s.volumeMusic, 0, 1, 0.05)}</label>
 
         <h3>${icon('sol')} Jogo</h3>
+        <label class="setting"><span>Personagem</span>${segmented('character', CHARACTER_OPTIONS, s.character)}</label>
         <label class="setting"><span>Duração do dia</span>${segmented('dayLength', DAY_OPTIONS, s.dayLength)}</label>
 
         <h3>${icon('salvar')} Dados</h3>

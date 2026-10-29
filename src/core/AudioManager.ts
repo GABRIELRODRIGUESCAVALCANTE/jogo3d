@@ -29,7 +29,33 @@ export type SoundName =
   | 'splash'
   | 'discover'
   | 'crystal'
-  | 'leaves';
+  | 'leaves'
+  | 'remove'
+  | 'rotate'
+  | 'equip'
+  | 'fall'
+  | 'break';
+
+/**
+ * Sons gravados (arquivos em public/assets/sounds, licença CC0 — Kenney).
+ * Quando um arquivo existe e carregou, ele substitui o som sintetizado.
+ * Vários arquivos para o mesmo som = variação aleatória.
+ */
+const SAMPLE_FILES: Partial<Record<SoundName, string[]>> = {
+  jump: ['pulo'],
+  land: ['aterrissar'],
+  pickup: ['coletar'],
+  build: ['construir-a', 'construir-b', 'construir-c', 'construir-d'],
+  remove: ['remover-a', 'remover-b', 'remover-c', 'remover-d'],
+  rotate: ['girar'],
+  click: ['clique'],
+  equip: ['equipar'],
+  fall: ['impacto'],
+  break: ['quebrar'],
+};
+
+/** Volume relativo de cada som gravado. */
+const SAMPLE_GAIN: Partial<Record<SoundName, number>> = { pickup: 0.45, click: 0.5, land: 0.7, jump: 0.6, fall: 0.9 };
 
 interface ToneOptions {
   type?: OscillatorType;
@@ -64,6 +90,8 @@ export class AudioManager {
   private waveLevel!: GainNode;
   private windLevel!: GainNode;
 
+  private samples = new Map<SoundName, AudioBuffer[]>();
+  private samplesRequested = false;
   private ambience = { day: 1, coast: 0.5, altitude: 0, cave: false };
   private birdTimer = 3;
   private cricketTimer = 2;
@@ -92,6 +120,46 @@ export class AudioManager {
       console.warn('[Áudio] indisponível neste navegador.', err);
       this.ctx = null;
     }
+  }
+
+  /**
+   * Baixa e decodifica os sons gravados (uma única vez). Se algum falhar,
+   * o jogo continua usando o som sintetizado correspondente.
+   */
+  loadSamples(baseUrl: string): void {
+    if (!this.ctx || this.samplesRequested) return;
+    this.samplesRequested = true;
+    const ctx = this.ctx;
+    for (const [name, files] of Object.entries(SAMPLE_FILES) as Array<[SoundName, string[]]>) {
+      for (const file of files) {
+        fetch(`${baseUrl}${file}.mp3`)
+          .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+          .then((data) => ctx.decodeAudioData(data))
+          .then((buffer) => {
+            const list = this.samples.get(name) ?? [];
+            list.push(buffer);
+            this.samples.set(name, list);
+          })
+          .catch(() => {
+            /* sem o arquivo: fica o som sintetizado */
+          });
+      }
+    }
+  }
+
+  /** Toca um som gravado. Retorna falso se ele não estiver disponível. */
+  private playSample(name: SoundName, pitch: number): boolean {
+    const list = this.samples.get(name);
+    if (!list || list.length === 0) return false;
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = list[Math.floor(Math.random() * list.length)];
+    src.playbackRate.value = pitch * (0.94 + Math.random() * 0.12);
+    const g = ctx.createGain();
+    g.gain.value = SAMPLE_GAIN[name] ?? 0.8;
+    src.connect(g).connect(this.sfx);
+    src.start();
+    return true;
   }
 
   /** Pausa todo o áudio (ex.: aba em segundo plano). */
@@ -163,6 +231,7 @@ export class AudioManager {
   /** Toca um efeito sonoro pelo nome. */
   play(name: SoundName, pitch = 1): void {
     if (!this.ready) return;
+    if (this.playSample(name, pitch)) return;
     const p = pitch;
     switch (name) {
       case 'chop':
@@ -238,6 +307,22 @@ export class AudioManager {
         this.tone(160, 2.2, { freqEnd: 820, gain: 0.14, attack: 0.4 });
         this.tone(240, 2.2, { type: 'triangle', freqEnd: 1230, gain: 0.08, attack: 0.5 });
         this.noiseBurst(2, { type: 'bandpass', freq: 400, freqEnd: 3000, q: 0.8, gain: 0.2, attack: 0.6 });
+        break;
+      case 'remove':
+        this.noiseBurst(0.2, { type: 'lowpass', freq: 600, freqEnd: 200, gain: 0.4 });
+        break;
+      case 'rotate':
+        this.tone(700, 0.05, { type: 'triangle', gain: 0.08 });
+        break;
+      case 'equip':
+        this.tone(520, 0.08, { type: 'triangle', freqEnd: 780, gain: 0.1 });
+        break;
+      case 'fall':
+        this.noiseBurst(0.35, { type: 'lowpass', freq: 220, gain: 0.7 });
+        this.tone(70, 0.3, { type: 'sine', freqEnd: 45, gain: 0.4 });
+        break;
+      case 'break':
+        this.noiseBurst(0.25, { type: 'bandpass', freq: 1200, freqEnd: 400, q: 0.8, gain: 0.45 });
         break;
       case 'splash':
         this.noiseBurst(0.35, { type: 'bandpass', freq: 1400, freqEnd: 500, q: 0.9, gain: 0.3 });

@@ -27,6 +27,7 @@ export interface LandmarkHooks {
   burst(position: THREE.Vector3, color: string, count: number): void;
   notify(text: string, kind?: NotifyKind): void;
   addXP(amount: number): void;
+  shake(amount: number): void;
   onEnding(): void;
 }
 
@@ -291,7 +292,7 @@ export class Landmarks {
     const rootMesh = this.mesh(merge(roots));
     rootMesh.position.set(p.x, y, p.z);
     this.group.add(rootMesh);
-    this.collision.add({ kind: 'circle', x: p.x, z: p.z, r: 1.3, top: y + 20 });
+    this.collision.add({ kind: 'circle', x: p.x, z: p.z, r: 1.3, top: y + 20, camera: true });
   }
 
   private buildRuins(): void {
@@ -319,7 +320,7 @@ export class Landmarks {
       const h = random() < 0.4 ? 1.2 + random() * 1.5 : 3.6 + random() * 1.8;
       pillarParts.push(part(new THREE.CylinderGeometry(0.55, 0.65, h, 7), STONE, { pos: [px, h / 2 + 0.3, pz], seed: i }));
       if (h > 3) pillarParts.push(part(new THREE.BoxGeometry(1.5, 0.4, 1.5), STONE_DARK, { pos: [px, h + 0.5, pz], rot: [0, a, 0] }));
-      this.collision.add({ kind: 'circle', x: c.x + px, z: c.z + pz, r: 0.7, top: y + h + 0.3 });
+      this.collision.add({ kind: 'circle', x: c.x + px, z: c.z + pz, r: 0.7, top: y + h + 0.3, camera: h > 3 });
     }
     // Pedaços caídos.
     for (let i = 0; i < 5; i++) {
@@ -363,7 +364,7 @@ export class Landmarks {
     const glyphMesh = new THREE.Mesh(merge(glyphs), this.glyphMaterial);
     glyphMesh.position.copy(monolith.position);
     this.group.add(glyphMesh);
-    this.collision.add({ kind: 'box', x: m.x, z: m.z, hw: 1.0, hd: 0.45, rot: 0, top: my + 4.4 });
+    this.collision.add({ kind: 'box', x: m.x, z: m.z, hw: 1.0, hd: 0.45, rot: 0, top: my + 4.4, camera: true });
     this.interaction.register({
       id: 'monolito',
       position: new THREE.Vector3(m.x, my + 1, m.z + 0.6),
@@ -415,6 +416,7 @@ export class Landmarks {
           return;
         }
         this.hooks.sound('portal');
+        this.hooks.shake(0.8);
         this.hooks.burst(new THREE.Vector3(al.x, y + 2.2, al.z), '#7ff3ff', 30);
         this.portalActive = 0.01;
         this.hooks.setFlag('altar');
@@ -516,7 +518,7 @@ export class Landmarks {
       g.rotateY(a);
       g.translate(x, 1.2, z);
       rocks.push(paint(g, random() > 0.5 ? '#7c7872' : '#6c6863', 0.08, deg));
-      this.collision.add({ kind: 'circle', x: c.x + x, z: c.z + z, r: 2.3, top: y + 6 });
+      this.collision.add({ kind: 'circle', x: c.x + x, z: c.z + z, r: 2.3, top: y + 6, camera: true });
     }
     // Pedras do arco da entrada.
     for (const side of [-1, 1]) {
@@ -525,7 +527,7 @@ export class Landmarks {
       g.scale(1, 2.2, 1);
       g.translate(Math.sin(a) * (R + 0.4), 1.6, Math.cos(a) * (R + 0.4));
       rocks.push(paint(g, '#7c7872', 0.08, 960 + side));
-      this.collision.add({ kind: 'circle', x: c.x + Math.sin(a) * (R + 0.4), z: c.z + Math.cos(a) * (R + 0.4), r: 1.6, top: y + 6 });
+      this.collision.add({ kind: 'circle', x: c.x + Math.sin(a) * (R + 0.4), z: c.z + Math.cos(a) * (R + 0.4), r: 1.6, top: y + 6, camera: true });
     }
     const walls = this.mesh(merge(rocks));
     walls.position.set(c.x, y, c.z);
@@ -590,8 +592,8 @@ export class Landmarks {
       interact: (ctx) => {
         if (this.hooks.hasFlag('entulho')) return;
         ctx.player.playAction('picareta');
-        this.hooks.sound('mine');
-        this.hooks.sound('build');
+        this.hooks.sound('break');
+        this.hooks.shake(0.5);
         this.hooks.burst(new THREE.Vector3(c.x, y + 1.5, c.z + R), '#9c978e', 30);
         this.hooks.addXP(25);
         this.hooks.giveItems({ pedra: 5 });
@@ -690,6 +692,7 @@ export class Landmarks {
         this.beaconLit = 0.01;
         this.updateBeaconVisuals();
         this.hooks.sound('portal');
+        this.hooks.shake(0.6);
         this.hooks.burst(new THREE.Vector3(p.x, y + 3.6, p.z), '#8ff0ff', 40);
         this.hooks.setFlag('farol');
         this.hooks.onEnding();

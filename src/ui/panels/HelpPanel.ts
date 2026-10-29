@@ -48,6 +48,13 @@ export class HelpPanel extends Panel {
             <li>À noite, acenda a tocha ou construa fogueiras e lanternas.</li>
             <li>Durma na cabana para pular a noite. O jogo salva sozinho a cada minuto.</li>
           </ul>
+          <h3>${icon('info')} Créditos</h3>
+          <ul class="tips credits">
+            <li>Robô: "RobotExpressive", de Tomás Laulhé (Quaternius) — CC0.</li>
+            <li>Raposa: modelo de PixelMannen (CC0); animação de tomkranis e conversão de @AsoboStudio e @scurest (CC BY 4.0) — Khronos glTF Sample Assets.</li>
+            <li>Efeitos sonoros: Kenney (kenney.nl) — CC0.</li>
+            <li>Feito com Three.js, TypeScript e Vite.</li>
+          </ul>
         </section>
       </div>`;
   }

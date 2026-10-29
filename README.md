@@ -261,7 +261,14 @@ O último comando abre o Android Studio, onde você gera o APK/AAB
 
 ## Créditos e licença
 
-Código, modelos low-poly, ícones e sons foram criados por código para este projeto.
+Código, modelos low-poly do mundo, ícones e música foram criados por código para este projeto.
+Recursos de terceiros (lista completa em `public/assets/CREDITOS.txt`):
+
+- **Robô** (`robo.glb`): "RobotExpressive", de Tomás Laulhé (Quaternius) — CC0.
+- **Raposa** (`raposa.glb`): "Fox" do glTF-Sample-Assets (Khronos) — modelo de PixelMannen (CC0);
+  rigging/animação de tomkranis e conversão de @AsoboStudio e @scurest
+  ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
+- **Efeitos sonoros** gravados: [Kenney](https://kenney.nl) — CC0.
 Bibliotecas: [Three.js](https://threejs.org) (MIT), [Vite](https://vite.dev) (MIT),
 fontes [Fredoka](https://fonts.google.com/specimen/Fredoka) e
 [Nunito](https://fonts.google.com/specimen/Nunito) via Fontsource (SIL Open Font License).

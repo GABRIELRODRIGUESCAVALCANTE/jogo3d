@@ -32,6 +32,8 @@ import { SaveSystem } from './SaveSystem';
 import { World } from './World';
 import { WorldState } from './WorldState';
 import { PLACES } from './world/layout';
+import { Wildlife } from './world/Wildlife';
+import { ModelLibrary } from './models/ModelLibrary';
 import type { MapMarker, MapView } from '../ui/MapRenderer';
 import { MapRenderer } from '../ui/MapRenderer';
 import { UIManager } from '../ui/UIManager';
@@ -41,6 +43,8 @@ import { icon } from '../ui/icons';
 export type GameState = 'loading' | 'menu' | 'playing';
 
 const AUTOSAVE_SECONDS = 60;
+/** Altura do modelo robo.glb nas unidades do próprio arquivo. */
+const ROBOT_HEIGHT = 4.79;
 const MENU_FOCUS = new THREE.Vector3(10, 4, 30);
 
 export class Game {
@@ -65,6 +69,8 @@ export class Game {
   readonly quests: QuestSystem;
   readonly saveSystem = new SaveSystem(new LocalStorageProvider());
   readonly particles = new Particles();
+  readonly models = new ModelLibrary();
+  wildlife!: Wildlife;
   readonly player = new Player();
   world!: World;
   building!: BuildingSystem;
@@ -103,6 +109,10 @@ export class Game {
   private readonly shadowBlob: THREE.Mesh;
   private readonly tmpVec = new THREE.Vector3();
   private readonly interactionCtx: InteractionContext;
+  private dustTimer = 0;
+  private characterLoaded = '';
+  /** A câmera não atravessa paredes de construções, rochas da caverna e pilares. */
+  private readonly cameraBlocked = (x: number, y: number, z: number) => this.collision.blocksCamera(x, y, z);
 
   constructor(private readonly container: HTMLElement, private readonly uiRoot: HTMLElement) {
     this.settings.load();
@@ -177,6 +187,10 @@ export class Game {
     this.world.scene.add(this.particles.mesh);
     this.world.scene.add(this.shadowBlob);
     this.mapRenderer = new MapRenderer(this.world.terrain);
+    this.wildlife = new Wildlife(this.world.terrain, this.collision, this.models);
+    this.wildlife.build();
+    this.wildlife.onSplash = (x, z) => this.particles.burst(this.tmpVec.set(x, 0.05, z), '#d8f6ff', 6, { up: 2.5, speed: 1.2, size: 0.1, life: 0.5 });
+    this.world.scene.add(this.wildlife.group);
 
     this.torchLight = this.lights.add({
       position: new THREE.Vector3(),
@@ -248,6 +262,7 @@ export class Game {
 
       this.world.update(dt, this.elapsed, focus, this.camera, simulate);
       this.particles.update(dt);
+      this.wildlife.update(dt, this.elapsed, focus, this.state === 'playing' && this.player.speed > 6.5, this.world.dayNight.night);
       this.lights.update(dt, focus, this.world.dayNight.night);
       this.audio.update(dt);
       if (this.state === 'playing') this.ui.update(dt);
@@ -303,6 +318,21 @@ export class Game {
         this.interaction.currentAction = null;
       }
       this.world.resources.update(dt, this.playTime, this.player.position);
+
+      // Poeira nos pés ao correr.
+      this.dustTimer -= dt;
+      if (this.player.speed > 6.5 && this.player.grounded && !this.player.swimming && this.dustTimer <= 0) {
+        this.dustTimer = 0.18;
+        const p = this.player.position;
+        const sand = this.world.terrain.getHeight(p.x, p.z) < 1.6;
+        this.particles.burst(this.tmpVec.set(p.x, p.y + 0.1, p.z), sand ? '#e8d6a0' : '#b9a27a', 2, {
+          up: 1,
+          speed: 0.8,
+          size: 0.16,
+          life: 0.45,
+          gravity: 2,
+        });
+      }
       this.updateTimers(dt);
     } else {
       input.consumeLook();
@@ -312,7 +342,7 @@ export class Game {
     this.building.update(dt);
     this.syncBuildMode();
     this.updateCameraZones();
-    this.cameraCtl.update(dt, this.player.position, getHeight);
+    this.cameraCtl.update(dt, this.player.position, getHeight, this.cameraBlocked);
 
     // Marcadores visuais.
     const target = this.interaction.current;
@@ -479,6 +509,9 @@ export class Game {
       this.player.maxEnergy = this.progression.maxEnergy;
       this.player.energy = this.player.maxEnergy;
       this.audio.play('levelup');
+      this.player.emote('comemorar');
+      this.cameraCtl.shake(0.25);
+      this.levelUpBurst();
       ui.notify.banner(`Nível ${level}`, 'Você subiu de nível! Energia máxima aumentou.', 'estrela', 'level');
       const unlocked = [
         ...RECIPES.filter((r) => r.minLevel === level).map((r) => ITEMS[r.result].name),
@@ -502,6 +535,7 @@ export class Game {
       const q = this.quests.getDef(questId);
       if (!q) return;
       this.audio.play('quest');
+      if (!this.player.isActing) this.player.emote('acenar');
       ui.notify.banner(q.title, 'Missão concluída!', 'missao', 'quest');
       if (q.completeText) ui.notify.toast(q.completeText, 'info', 'estrela');
       ui.hud.markQuestsDirty();
@@ -516,6 +550,8 @@ export class Game {
     });
     bus.on('structure:built', () => {
       this.stats.built++;
+      this.player.emote('positivo');
+      this.cameraCtl.shake(0.18);
       ui.hud.markQuestsDirty();
       this.autosaveTimer = Math.min(this.autosaveTimer, 2);
     });
@@ -545,7 +581,18 @@ export class Game {
       );
       this.audio.play(r.node.def.sound, 0.9 + Math.random() * 0.2);
       this.player.playAction(r.toolUsed);
-      if (r.depleted && tall) window.setTimeout(() => this.audio.play('land'), 1100);
+      if (r.depleted && tall) {
+        // A árvore cai: baque, tremor e poeira.
+        window.setTimeout(() => {
+          this.audio.play('fall');
+          const near = Math.hypot(r.node.x - this.player.position.x, r.node.z - this.player.position.z) < 12;
+          if (near) this.cameraCtl.shake(0.35);
+          this.particles.burst(new THREE.Vector3(r.node.x, r.node.y + 0.3, r.node.z), '#c9b48a', 14, { up: 2, speed: 3 });
+        }, 1150);
+      } else if (r.depleted && r.node.kind === 'rocha') {
+        this.audio.play('break');
+        this.cameraCtl.shake(0.12);
+      }
     };
 
     this.interaction.onBlocked = (reason) => {
@@ -567,6 +614,7 @@ export class Game {
     p.onJump = () => this.audio.play('jump');
     p.onLand = (impact) => {
       this.audio.play('land');
+      if (impact > 0.45) this.cameraCtl.shake(impact * 0.4);
       if (impact > 0.35) this.particles.burst(this.tmpVec.copy(p.position).setY(p.position.y + 0.1), '#d8c7a0', 8, { up: 1.5, speed: 2 });
     };
     p.onSplash = () => {
@@ -648,7 +696,10 @@ export class Game {
     });
 
     // Áudio só pode começar depois de um toque/clique.
-    const unlockAudio = () => this.audio.unlock();
+    const unlockAudio = () => {
+      this.audio.unlock();
+      this.audio.loadSamples(`${import.meta.env.BASE_URL}assets/sounds/`);
+    };
     window.addEventListener('pointerdown', unlockAudio);
     window.addEventListener('keydown', unlockAudio);
 
@@ -749,6 +800,7 @@ export class Game {
     this.world.setShadows(preset.shadows, preset.shadowMapSize);
     this.world.setRenderDistance(preset.renderDistance);
     this.world.decorations.setDensity(preset.decorationDensity);
+    this.wildlife?.setDensity(preset.decorationDensity);
     this.lights.setCount(preset.maxPointLights);
     this.shadowBlob.visible = !preset.shadows;
     // Materiais precisam ser recompilados quando as sombras mudam.
@@ -764,6 +816,7 @@ export class Game {
   /** Controles, áudio e duração do dia (não exigem recompilar materiais). */
   private applyGameplaySettings(): void {
     const s = this.settings.data;
+    if (s.character !== this.characterLoaded) void this.applyCharacter();
     this.cameraCtl.sensitivity = s.sensitivity;
     this.cameraCtl.invertY = s.invertY;
     this.audio.setVolumes(s);
@@ -772,6 +825,38 @@ export class Game {
     if (this.controlMode === 'touch' && document.pointerLockElement) {
       this.unlockIntent = true;
       document.exitPointerLock();
+    }
+  }
+
+  /** Troca a aparência do personagem (o robô é um modelo glTF baixado na hora). */
+  private async applyCharacter(): Promise<void> {
+    const look = this.settings.data.character;
+    this.characterLoaded = look;
+    if (look === 'explorador') {
+      this.player.setAvatar(null);
+      return;
+    }
+    const model = await this.models.instance('robo.glb');
+    if (this.settings.data.character !== look) return; // mudou de ideia enquanto carregava
+    if (!model) {
+      this.ui.notify.toast('Não foi possível carregar o personagem Robô. Usando o Explorador.', 'warning');
+      this.player.setAvatar(null);
+      return;
+    }
+    this.player.setAvatar(model, ROBOT_HEIGHT);
+  }
+
+  /** Anel de faíscas douradas ao subir de nível. */
+  private levelUpBurst(): void {
+    const p = this.player.position;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      this.particles.burst(this.tmpVec.set(p.x + Math.cos(a) * 0.8, p.y + 0.4, p.z + Math.sin(a) * 0.8), '#ffd166', 3, {
+        up: 6,
+        speed: 1.5,
+        gravity: 6,
+        life: 1.1,
+      });
     }
   }
 
@@ -1002,6 +1087,7 @@ export class Game {
     const recipe = getRecipe(recipeId);
     if (result.ok && recipe) {
       this.audio.play('craft');
+      this.player.emote('positivo');
       this.progression.addXP(recipe.xp);
       this.ui.notify.toast(`Fabricado: ${ITEMS[recipe.result].name}`, 'success', ITEMS[recipe.result].icon);
       this.particles.burst(this.tmpVec.copy(this.player.position).setY(this.player.position.y + 1.2), '#ffd166', 10);
@@ -1032,7 +1118,7 @@ export class Game {
       return;
     }
     this.player.torchOn = !this.player.torchOn;
-    this.audio.play(this.player.torchOn ? 'open' : 'close');
+    this.audio.play('equip');
     this.ui.touch.setTorchAvailable(true, this.player.torchOn);
     this.ui.refresh('inventario');
   }
@@ -1115,6 +1201,7 @@ export class Game {
       burst: (pos: THREE.Vector3, color: string, count: number) => this.particles.burst(pos, color, count, { up: 4, speed: 3 }),
       notify: (text: string, kind?: Parameters<UIManager['notify']['toast']>[1]) => this.ui.notify.toast(text, kind),
       addXP: (n: number) => this.progression.addXP(n),
+      shake: (amount: number) => this.cameraCtl.shake(amount),
       onEnding: () => void this.showEnding(),
     };
   }
