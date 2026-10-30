@@ -55,6 +55,8 @@ export interface SaveData {
     /** Névoa do mapa da Ilha da Aurora. */
     exploredAurora?: string;
     nodes: Record<string, NodeSave>;
+    /** Marcadores colocados pelo jogador no mapa (c = índice da cor). */
+    pins?: Array<{ x: number; z: number; c: number }>;
     /** Clima atual e segundos até a próxima mudança. */
     weather?: { kind: string; timer: number; mist?: boolean };
   };
@@ -94,6 +96,9 @@ export function migrateSave(raw: Record<string, unknown>): Record<string, unknow
 }
 
 /** Verifica se os dados lidos têm o formato esperado. Retorna null se estiverem corrompidos. */
+/** Máximo de marcadores no mapa. */
+export const MAX_PINS = 24;
+
 export function validateSave(input: unknown): SaveData | null {
   if (!isObj(input)) return null;
   const data = migrateSave(input);
@@ -161,6 +166,12 @@ export function validateSave(input: unknown): SaveData | null {
       regions: Array.isArray(world.regions) ? world.regions.filter((r): r is string => typeof r === 'string') : [],
       explored: typeof world.explored === 'string' ? world.explored : '',
       exploredAurora: typeof world.exploredAurora === 'string' ? world.exploredAurora : '',
+      pins: Array.isArray(world.pins)
+        ? world.pins
+            .filter((p): p is { x: number; z: number; c: number } => isObj(p) && isNum(p.x) && isNum(p.z) && isNum(p.c))
+            .slice(0, MAX_PINS)
+            .map((p) => ({ x: p.x, z: p.z, c: Math.max(0, Math.min(3, Math.floor(p.c))) }))
+        : [],
       weather:
         isObj(world.weather) && typeof world.weather.kind === 'string' && isNum(world.weather.timer)
           ? { kind: world.weather.kind, timer: world.weather.timer, ...(world.weather.mist === true ? { mist: true } : {}) }

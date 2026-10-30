@@ -1606,6 +1606,45 @@ li.done .qt-text,
   background: #e0b44c;
 }
 
+.lg-pin {
+  background: #ff5d5d;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+}
+
+.map-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.pin-colors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.pin-color {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--pin);
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  padding: 0;
+}
+
+.pin-color.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--pin);
+}
+
+.map-canvas {
+  cursor: crosshair;
+}
+
 /* Missões */
 .quest-summary {
   display: flex;

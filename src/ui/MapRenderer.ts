@@ -10,9 +10,14 @@ import { WATER_LEVEL } from '../game/world/layout';
 export interface MapMarker {
   x: number;
   z: number;
-  type: 'quest' | 'structure' | 'landmark' | 'chest';
+  type: 'quest' | 'structure' | 'landmark' | 'chest' | 'pin';
   label?: string;
+  /** Cor do marcador colocado pelo jogador. */
+  color?: string;
 }
+
+/** Cores dos marcadores que o jogador coloca no mapa. */
+export const PIN_COLORS = ['#ff5d5d', '#4da3ff', '#5bd46a', '#c77dff'];
 
 export interface MapView {
   playerX: number;
@@ -212,6 +217,19 @@ export class MapRenderer {
     ctx.restore();
   }
 
+  /** Converte um ponto do canvas do mapa completo (em pixels do canvas) para o mundo. */
+  screenToWorld(canvas: HTMLCanvasElement, px: number, py: number): { x: number; z: number } {
+    const scale = Math.min(canvas.width, canvas.height) / this.size;
+    const ox = (canvas.width - this.size * scale) / 2;
+    const oy = (canvas.height - this.size * scale) / 2;
+    return { x: this.minX + (px - ox) / scale, z: this.minZ + (py - oy) / scale };
+  }
+
+  /** Metros por pixel do canvas no mapa completo. */
+  metersPerPixel(canvas: HTMLCanvasElement): number {
+    return this.size / Math.min(canvas.width, canvas.height);
+  }
+
   /** Mapa completo (norte para cima). */
   drawFull(
     canvas: HTMLCanvasElement,
@@ -326,6 +344,23 @@ export class MapRenderer {
         ctx.fillRect(-4 * unit, -3 * unit, 8 * unit, 6 * unit);
         ctx.strokeRect(-4 * unit, -3 * unit, 8 * unit, 6 * unit);
         break;
+      case 'pin': {
+        // Alfinete: gota com a ponta no lugar marcado.
+        ctx.fillStyle = m.color ?? PIN_COLORS[0];
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5 * unit;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(-6 * unit, -7 * unit, -5 * unit, -13 * unit, 0, -13 * unit);
+        ctx.bezierCurveTo(5 * unit, -13 * unit, 6 * unit, -7 * unit, 0, 0);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(0, -9 * unit, 2 * unit, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
       case 'landmark':
         ctx.fillStyle = '#5ee8ff';
         ctx.strokeStyle = '#1b4b5c';

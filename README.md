@@ -104,6 +104,8 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
 - 27 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 8 opcionais, com recompensas e finais.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
+- **Marcadores do jogador**: toque no mapa para colocar alfinetes coloridos (até 24); eles aparecem no
+  minimapa e como bandeirinhas no mundo, e são salvos.
 - Ciclo de dia e noite (sol, lua, estrelas), luzes de fogueiras, lanternas e tocha; dormir na cabana pula a noite.
 - **Clima**: céu limpo, nublado, chuva e tempestade (com relâmpagos e trovões), que mudam sozinhos.
   A chuva **apaga fogueiras ao relento** (as que estão sob um telhado ou dentro da cabana continuam acesas;

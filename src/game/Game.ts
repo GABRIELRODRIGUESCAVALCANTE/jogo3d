@@ -35,7 +35,7 @@ import { Particles } from './Particles';
 import { Player } from './Player';
 import { Progression } from './Progression';
 import { QuestSystem } from './Quests';
-import { SAVE_VERSION, type SaveData } from './save/SaveData';
+import { MAX_PINS, SAVE_VERSION, type SaveData } from './save/SaveData';
 import { LocalStorageProvider } from './save/StorageProvider';
 import { SaveSystem } from './SaveSystem';
 import { World } from './World';
@@ -45,7 +45,7 @@ import { PLACES } from './world/layout';
 import { Wildlife } from './world/Wildlife';
 import { ModelLibrary } from './models/ModelLibrary';
 import type { MapMarker, MapView } from '../ui/MapRenderer';
-import { MapRenderer } from '../ui/MapRenderer';
+import { MapRenderer, PIN_COLORS } from '../ui/MapRenderer';
 import { UIManager } from '../ui/UIManager';
 import { nextFrame } from '../ui/dom';
 import { icon } from '../ui/icons';
@@ -55,6 +55,16 @@ export type GameState = 'loading' | 'menu' | 'playing';
 const AUTOSAVE_SECONDS = 60;
 /** Chance de uma noite ter névoa densa. */
 const MIST_CHANCE = 0.35;
+
+const PIN_POLE = new THREE.CylinderGeometry(0.06, 0.06, 4, 5);
+const PIN_POLE_MAT = new THREE.MeshLambertMaterial({ color: '#6b4a2f' });
+const PIN_CLOTH = new THREE.BoxGeometry(0.9, 0.55, 0.04);
+const pinMaterials: THREE.MeshBasicMaterial[] = [];
+/** Material da bandeirinha (sem sombra: aparece bem até de noite). */
+function pinMaterial(c: number): THREE.MeshBasicMaterial {
+  pinMaterials[c] ??= new THREE.MeshBasicMaterial({ color: PIN_COLORS[c] ?? PIN_COLORS[0] });
+  return pinMaterials[c];
+}
 /** Altura do modelo robo.glb nas unidades do próprio arquivo. */
 const ROBOT_HEIGHT = 4.79;
 const MENU_FOCUS = new THREE.Vector3(10, 4, 30);
@@ -158,6 +168,10 @@ export class Game {
   private thunders: number[] = [];
   /** Era noite no quadro anterior (para perceber anoitecer e amanhecer). */
   private wasNight = false;
+  /** Marcadores que o jogador colocou no mapa (c = índice da cor). */
+  pins: Array<{ x: number; z: number; c: number }> = [];
+  /** Bandeirinhas no mundo 3D, uma por marcador. */
+  private readonly pinFlags = new THREE.Group();
   private characterLoaded = '';
   /** A câmera não atravessa paredes de construções, rochas da caverna e pilares. */
   private readonly cameraBlocked = (x: number, y: number, z: number) => this.collision.blocksCamera(x, y, z);
@@ -301,6 +315,8 @@ export class Game {
       },
     });
     this.world.scene.add(this.pet.group);
+    this.pinFlags.name = 'Marcadores do mapa';
+    this.world.scene.add(this.pinFlags);
     this.interaction.addProvider(this.pet);
     this.bus.on('treasure:dug', ({ total }) => {
       if (total >= 3) this.worldState.setFlag('tesouros_3');
@@ -1304,6 +1320,7 @@ export class Game {
     this.world.weather.setMist(false, true);
     this.fireflies?.reset();
     this.pet?.reset();
+    this.setPins([]);
     this.wasNight = this.world.dayNight.isNight;
     this.thunders = [];
     this.playTime = 0;
@@ -1361,6 +1378,7 @@ export class Game {
     this.player.buffTime = p.buffTime;
     this.player.hunger = clamp(p.hunger, 0, 100);
     this.pet.load(data.pet, data.pet?.tameProgress ?? 0);
+    this.setPins(data.world.pins ?? []);
   }
 
   private createSaveData(): SaveData {
@@ -1393,6 +1411,7 @@ export class Game {
         exploredAurora: this.worldState.exploredToBase64('aurora'),
         nodes: this.saveNodes(),
         weather: this.world.weather.toJSON(),
+        pins: this.pins.map((p) => ({ ...p })),
       },
       stats: { ...this.stats },
       pet: { ...this.pet.toJSON(), tameProgress: this.pet.tameProgress },
@@ -1530,6 +1549,50 @@ export class Game {
     return quest?.target ?? null;
   }
 
+  // ===========================================================================
+  // Marcadores do mapa
+  // ===========================================================================
+
+  /**
+   * Toque no mapa: tira o marcador que estiver perto (dentro de `radius`
+   * metros) ou coloca um novo com a cor escolhida. Retorna o que aconteceu.
+   */
+  toggleMapPin(x: number, z: number, color: number, radius: number): 'added' | 'removed' | 'full' {
+    const i = this.pins.findIndex((p) => Math.hypot(p.x - x, p.z - z) <= radius);
+    if (i >= 0) {
+      this.setPins(this.pins.filter((_, k) => k !== i));
+      this.audio.play('remove');
+      return 'removed';
+    }
+    if (this.pins.length >= MAX_PINS) {
+      this.ui.notify.toast(`Você já colocou ${MAX_PINS} marcadores. Tire algum para marcar outro lugar.`, 'warning', 'mapa');
+      return 'full';
+    }
+    this.setPins([...this.pins, { x, z, c: color }]);
+    this.audio.play('click');
+    return 'added';
+  }
+
+  clearMapPins(): void {
+    this.setPins([]);
+  }
+
+  private setPins(pins: Array<{ x: number; z: number; c: number }>): void {
+    this.pins = pins;
+    // Bandeirinhas no mundo: um mastro alto com a cor do marcador.
+    for (const child of [...this.pinFlags.children]) this.pinFlags.remove(child);
+    for (const p of pins) {
+      const flag = new THREE.Group();
+      const pole = new THREE.Mesh(PIN_POLE, PIN_POLE_MAT);
+      pole.position.y = 2;
+      const cloth = new THREE.Mesh(PIN_CLOTH, pinMaterial(p.c));
+      cloth.position.set(0.45, 3.5, 0);
+      flag.add(pole, cloth);
+      flag.position.set(p.x, this.world.terrain.getHeight(p.x, p.z), p.z);
+      this.pinFlags.add(flag);
+    }
+  }
+
   /** Baús da história ainda fechados. */
   closedChests(): Array<{ x: number; z: number }> {
     const chests: Array<[string, { x: number; z: number }]> = [
@@ -1561,6 +1624,7 @@ export class Game {
     for (const pos of this.closedChests()) {
       if (ws.isExplored(pos.x, pos.z)) markers.push({ x: pos.x, z: pos.z, type: 'chest' });
     }
+    for (const p of this.pins) markers.push({ x: p.x, z: p.z, type: 'pin', color: PIN_COLORS[p.c] });
     // Tesouros que a raposa achou e ainda não foram escavados.
     for (const t of this.pet.foundTreasures) markers.push({ x: t.x, z: t.z, type: 'chest' });
     const target = this.questTarget();
