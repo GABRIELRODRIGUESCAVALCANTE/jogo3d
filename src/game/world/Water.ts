@@ -17,22 +17,44 @@ export class Water {
   private readonly uniforms = { uTime: { value: 0 } };
 
   constructor(getHeight: (x: number, z: number) => number) {
-    // Grade não uniforme: vértices densos perto da ilha (onde a cor muda
-    // conforme a profundidade) e espaçados no mar aberto, coberto pela névoa.
-    const segments = 120;
-    const geometry = new THREE.PlaneGeometry(2, 2, segments, segments);
-    geometry.rotateX(-Math.PI / 2);
-    const pos = geometry.attributes.position as THREE.BufferAttribute;
-    const remap = (c: number) => {
-      const a = Math.abs(c);
-      const inner = 0.75; // 75% dos vértices cobrem ±190 m
-      const v = a <= inner ? (a / inner) * 190 : 190 + ((a - inner) / (1 - inner)) ** 2 * 520;
-      return Math.sign(c) * v;
-    };
-    for (let i = 0; i < pos.count; i++) pos.setXYZ(i, remap(pos.getX(i)), 0, remap(pos.getZ(i)));
+    // Grade com faixas: vértices densos (~4,5 m) perto das duas ilhas, onde a
+    // cor muda com a profundidade, e espaçados no mar aberto (coberto pela névoa).
+    const xs = bands([
+      [-950, -200, 6],
+      [-200, 200, 90],
+      [200, 410, 10],
+      [410, 710, 70],
+      [710, 1000, 6],
+    ]);
+    const zs = bands([
+      [-950, -410, 8],
+      [-410, 200, 136],
+      [200, 950, 12],
+    ]);
+    const vertices = new Float32Array(xs.length * zs.length * 3);
+    let v = 0;
+    for (const z of zs) {
+      for (const x of xs) {
+        vertices[v++] = x;
+        vertices[v++] = 0;
+        vertices[v++] = z;
+      }
+    }
+    const indices: number[] = [];
+    const row = xs.length;
+    for (let iz = 0; iz < zs.length - 1; iz++) {
+      for (let ix = 0; ix < row - 1; ix++) {
+        const a = iz * row + ix;
+        const b = a + row;
+        indices.push(a, b, a + 1, b, b + 1, a + 1);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-
+    const pos = geometry.attributes.position as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 4);
     const color = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
@@ -82,4 +104,14 @@ export class Water {
   update(elapsed: number): void {
     this.uniforms.uTime.value = elapsed;
   }
+}
+
+/** Coordenadas de uma linha da grade a partir de faixas [início, fim, divisões]. */
+function bands(list: Array<[number, number, number]>): number[] {
+  const out: number[] = [];
+  for (const [start, end, segments] of list) {
+    for (let i = 0; i < segments; i++) out.push(start + ((end - start) * i) / segments);
+  }
+  out.push(list[list.length - 1][1]);
+  return out;
 }

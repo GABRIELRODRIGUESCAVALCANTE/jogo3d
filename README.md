@@ -85,12 +85,16 @@ O tipo de controle é detectado automaticamente e pode ser trocado em **Opções
 - **Horta**: sementes do capim alto, canteiro, crescimento em tempo de jogo e colheita de batatas-doces.
 - **Baú de armazenamento** para guardar itens.
 - **Construção modular** em grade de 2 m: piso, paredes (lisa, com porta, com janela) e telhado de palha.
+- **Barco a vela** (depois de acender o farol): construa na água rasa, embarque e navegue pelo mar.
+- **Ilha da Aurora** (capítulo 2): uma segunda ilha a nordeste, gerada **sob demanda** — o terreno é
+  montado aos poucos (um pedaço por quadro) quando você se aproxima. Tem floresta azulada, três
+  pilares de cristal e o Observatório dos Lumeni, que acende uma aurora no céu noturno.
 - Fauna: raposas animadas (glTF), caranguejos, gaivotas e peixes que saltam da água.
 - Personagem à escolha: Explorador ou Robô (modelo glTF com animações e gestos).
 - Inventário visual, comida que restaura energia e o bônus "Bem alimentado".
 - Fabricação: corda, machado, picareta, tocha, vara de pesca e comidas assadas (com estações: bancada e fogueira).
 - Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, baú, canteiro, peças modulares, cerca, caminho e lanterna.
-- 18 missões (15 da história principal e 3 opcionais) com objetivos, recompensas e um final.
+- 22 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 3 opcionais, com recompensas e finais.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
 - Ciclo de dia e noite (sol, lua, estrelas), luzes de fogueiras, lanternas e tocha; dormir na cabana pula a noite.
@@ -165,12 +169,15 @@ tests/                     Testes automáticos (Vitest)
 Os sistemas conversam por **eventos** (`src/game/events.ts`), então um módulo novo pode reagir,
 por exemplo, a `resource:gathered` sem alterar o inventário.
 
-### Expansão do mundo
+### Expansão do mundo (várias ilhas)
 
-O terreno é gerado por uma função determinística (mesma semente = mesma ilha) e montado em
-*chunks* (`Terrain.ts`), que já são escondidos quando ficam longe. Para crescer o mundo:
-aumente `WORLD_SIZE`/`TERRAIN_SEGMENTS` em `layout.ts`, adicione regiões e lugares, e — para mapas
-muito grandes — gere/carregue os chunks perto do jogador em vez de todos de uma vez.
+Cada ilha é uma `IslandShape` em `src/game/world/islands.ts`: centro, tamanho, resolução e a
+função de altura. O `TerrainSet` responde a altura do chão em qualquer ponto do mundo, perguntando
+à ilha certa. A ilha principal é montada no carregamento; a Ilha da Aurora só é criada quando o
+jogador chega a ~340 m dela, e a malha aparece um *chunk* por quadro (`Terrain.buildNextChunk`).
+Para adicionar uma terceira ilha: crie outra `IslandShape`, inclua em `ISLAND_SHAPES`, adicione
+uma grade de exploração em `WorldState`, uma faixa densa na água (`Water.ts`) e o conteúdo
+(recursos, marcos e missões), seguindo o exemplo da Aurora.
 
 ---
 

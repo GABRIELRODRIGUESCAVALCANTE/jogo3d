@@ -14,7 +14,7 @@ import type { ItemId } from './data/items';
 import type { GameEventBus } from './events';
 import type { Interactable, InteractableProvider, InteractionContext } from './InteractionSystem';
 import type { Player } from './Player';
-import type { Terrain } from './world/Terrain';
+import type { HeightField } from './world/Terrain';
 import type { FishSchool, Wildlife } from './world/Wildlife';
 import { WATER_LEVEL } from './world/layout';
 
@@ -50,7 +50,7 @@ export class FishingSystem implements InteractableProvider {
   constructor(
     private readonly player: Player,
     private readonly wildlife: Wildlife,
-    private readonly terrain: Terrain,
+    private readonly terrain: HeightField,
     private readonly bus: GameEventBus,
     private readonly hooks: FishingHooks,
   ) {
@@ -70,6 +70,7 @@ export class FishingSystem implements InteractableProvider {
       id: 'pescar',
       position: new THREE.Vector3(),
       radius: 9,
+      priority: 0.6,
       getAction: () => {
         if (!this.hooks.hasRod()) return { label: 'Pescar', enabled: false, reason: 'Requer Vara de Pesca (fabrique no menu C)' };
         return { label: 'Pescar', enabled: true };

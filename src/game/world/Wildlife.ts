@@ -15,7 +15,7 @@ import { createRandom, dampAngle, randRange } from '../../core/math';
 import type { CollisionWorld } from '../Collision';
 import { createFlatMaterial, merge, part } from '../models/geometry';
 import { Animator, type ModelLibrary } from '../models/ModelLibrary';
-import type { Terrain } from './Terrain';
+import type { HeightField } from './Terrain';
 import { PLACES, WATER_LEVEL, WORLD_SEED } from './layout';
 
 interface Fox {
@@ -90,7 +90,7 @@ export class Wildlife {
   private birdWings!: THREE.InstancedMesh;
   private fishMesh!: THREE.InstancedMesh;
   private density = 1;
-  private readonly random = createRandom(WORLD_SEED + 7);
+  private readonly random: () => number;
   private readonly m = new THREE.Matrix4();
   private readonly m2 = new THREE.Matrix4();
   private readonly wingFlip = new THREE.Matrix4().makeRotationY(Math.PI);
@@ -100,12 +100,22 @@ export class Wildlife {
   private readonly p = new THREE.Vector3();
   private readonly s = new THREE.Vector3(1, 1, 1);
 
+  /** Centro da ilha onde estes animais vivem e o fator de tamanho da ilha. */
+  private readonly cx: number;
+  private readonly cz: number;
+  private readonly k: number;
+
   constructor(
-    private readonly terrain: Terrain,
+    private readonly terrain: HeightField,
     private readonly collision: CollisionWorld,
     private readonly models: ModelLibrary,
+    area: { x: number; z: number; scale: number; seed: number } = { x: 0, z: 0, scale: 1, seed: 0 },
   ) {
     this.group.name = 'Fauna';
+    this.cx = area.x;
+    this.cz = area.z;
+    this.k = area.scale;
+    this.random = createRandom(WORLD_SEED + 7 + area.seed);
   }
 
   /** Cria os animais. As raposas chegam depois (o modelo é baixado). */
@@ -135,8 +145,8 @@ export class Wildlife {
     const spots: Array<[number, number]> = [];
     let attempts = 0;
     while (spots.length < count && attempts++ < 400) {
-      const x = randRange(this.random, -110, 110);
-      const z = randRange(this.random, -40, 80);
+      const x = this.cx + randRange(this.random, -110, 110) * this.k;
+      const z = this.cz + randRange(this.random, -40, 80) * this.k;
       const h = this.terrain.getHeight(x, z);
       if (h < 2.5 || h > 14 || this.terrain.getSlope(x, z) > 0.5) continue;
       if (Math.hypot(x - PLACES.clearing.x, z - PLACES.clearing.z) < 22) continue;
@@ -250,8 +260,8 @@ export class Wildlife {
     this.crabMesh.castShadow = true;
     let attempts = 0;
     while (this.crabs.length < count && attempts++ < 3000) {
-      const x = randRange(this.random, -150, 150);
-      const z = randRange(this.random, -150, 160);
+      const x = this.cx + randRange(this.random, -150, 150) * this.k;
+      const z = this.cz + randRange(this.random, -150, 160) * this.k;
       const h = this.terrain.getHeight(x, z);
       if (h < 0.15 || h > 1.3) continue;
       this.crabs.push({ x, z, yaw: this.random() * Math.PI * 2, dir: 1, speed: 0, timer: this.random() * 3, phase: this.random() * 10 });
@@ -330,7 +340,7 @@ export class Wildlife {
       [96, 6, 28],
       [-12, -100, 62],
       [120, 70, 20],
-    ];
+    ].map(([x, z, h]) => [this.cx + x * this.k, this.cz + z * this.k, h]);
     for (let i = 0; i < count; i++) {
       const [cx, cz, h] = centers[i % centers.length];
       this.birds.push({
@@ -396,9 +406,9 @@ export class Wildlife {
     let attempts = 0;
     while (this.schools.length < 9 && attempts++ < 5000) {
       const a = this.random() * Math.PI * 2;
-      const r = randRange(this.random, 120, 165);
-      const x = Math.sin(a) * r;
-      const z = Math.cos(a) * r + 6;
+      const r = randRange(this.random, 120, 165) * this.k;
+      const x = this.cx + Math.sin(a) * r;
+      const z = this.cz + Math.cos(a) * r + 6;
       const depth = WATER_LEVEL - this.terrain.getHeight(x, z);
       if (depth < 0.9 || depth > 3.2) continue;
       if (this.schools.some((s) => Math.hypot(s.x - x, s.z - z) < 25)) continue;

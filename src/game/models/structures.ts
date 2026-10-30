@@ -70,7 +70,33 @@ export function createStructureModel(type: StructureId): StructureModel {
       return createWall('janela');
     case 'telhado':
       return createRoofTile();
+    case 'barco':
+      return createBoat();
   }
+}
+
+/** Barco a vela: a proa aponta para +Z. A origem fica na linha d'água. */
+function createBoat(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [];
+  parts.push(part(new THREE.BoxGeometry(1.4, 0.35, 3.6), WOOD_DARK, { pos: [0, -0.15, -0.1] }));
+  for (const side of [-1, 1]) {
+    parts.push(part(new THREE.BoxGeometry(0.12, 0.6, 3.6), WOOD, { pos: [side * 0.75, 0.15, -0.1], rot: [0, 0, side * 0.25] }));
+    parts.push(part(new THREE.BoxGeometry(0.12, 0.55, 1.2), WOOD, { pos: [side * 0.4, 0.15, 2.1], rot: [0, -side * 0.6, side * 0.25] }));
+  }
+  parts.push(part(new THREE.BoxGeometry(1.5, 0.6, 0.12), WOOD, { pos: [0, 0.15, -1.9] }));
+  parts.push(part(new THREE.BoxGeometry(1.3, 0.08, 0.4), WOOD_LIGHT, { pos: [0, 0.2, -1.1] }));
+  parts.push(part(new THREE.CylinderGeometry(0.07, 0.09, 4.2, 6), WOOD_DARK, { pos: [0, 2.2, 0.5] }));
+  parts.push(part(new THREE.CylinderGeometry(0.04, 0.04, 2, 5), WOOD_DARK, { rot: [Math.PI / 2, 0, 0], pos: [0, 1.0, -0.4] }));
+  root.add(mesh(merge(parts)));
+  // Vela triangular (dos dois lados).
+  const sailShape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0, 3.4), new THREE.Vector2(-1.9, 0)]);
+  const sail = new THREE.Mesh(new THREE.ShapeGeometry(sailShape), new THREE.MeshLambertMaterial({ color: '#f4ead2', side: THREE.DoubleSide }));
+  sail.rotation.y = Math.PI / 2;
+  sail.position.set(0, 1.05, 0.48);
+  sail.castShadow = true;
+  root.add(sail);
+  return { root };
 }
 
 function createChest(): StructureModel {

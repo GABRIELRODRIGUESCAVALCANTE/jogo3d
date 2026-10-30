@@ -52,6 +52,8 @@ export interface SaveData {
     flags: string[];
     regions: string[];
     explored: string;
+    /** Névoa do mapa da Ilha da Aurora. */
+    exploredAurora?: string;
     nodes: Record<string, NodeSave>;
   };
   stats: { gathered: number; crafted: number; built: number };
@@ -154,6 +156,7 @@ export function validateSave(input: unknown): SaveData | null {
       flags: Array.isArray(world.flags) ? world.flags.filter((f): f is string => typeof f === 'string') : [],
       regions: Array.isArray(world.regions) ? world.regions.filter((r): r is string => typeof r === 'string') : [],
       explored: typeof world.explored === 'string' ? world.explored : '',
+      exploredAurora: typeof world.exploredAurora === 'string' ? world.exploredAurora : '',
       nodes,
     },
     stats: {

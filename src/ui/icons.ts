@@ -151,6 +151,12 @@ export const ICONS: Record<string, string> = {
     <path d="M4 12h24M4 22h24" stroke="#6b4528" stroke-width="1.5"/>
     <rect x="11" y="13" width="10" height="7" fill="#8fd3ff"/>
     <path d="M16 13v7" stroke="#6b4528" stroke-width="1.5"/>`),
+  barco: svg(`
+    <path d="M3 21h26l-4 6H8z" fill="#9a6a3f"/>
+    <path d="M16 3v17" stroke="#6b4528" stroke-width="2"/>
+    <path d="M16 4l9 15h-9z" fill="#f4ead2"/>
+    <path d="M15 7l-8 12h8z" fill="#ffd9a0"/>
+    <path d="M2 28c4-2 7 2 11 0s7 2 11 0 5 2 6 0" stroke="#3fb0e6" stroke-width="2" fill="none"/>`),
   telhado: svg(`
     <path d="M2 20L16 7l14 13z" fill="#d9b45a"/>
     <path d="M6 17h20M10 13h12" stroke="#a8843a" stroke-width="1.6"/>

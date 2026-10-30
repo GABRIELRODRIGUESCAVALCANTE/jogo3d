@@ -56,3 +56,22 @@ describe('Terreno', () => {
     expect(regionAt(PLACES.cave.x, PLACES.cave.z)?.id).toBe('caverna');
   });
 });
+
+describe('Ilha da Aurora', () => {
+  it('tem praia, colina do observatório e mar entre as ilhas', async () => {
+    const { TerrainSet } = await import('../src/game/world/Terrain');
+    const { ISLAND_SHAPES, AURORA_PLACES } = await import('../src/game/world/islands');
+    const set = new TerrainSet(ISLAND_SHAPES);
+    // Antes de gerar, a altura vem da fórmula; depois, da malha (quase igual).
+    const antes = set.getHeight(AURORA_PLACES.observatory.x, AURORA_PLACES.observatory.z);
+    set.get('aurora').generateHeights();
+    const depois = set.getHeight(AURORA_PLACES.observatory.x, AURORA_PLACES.observatory.z);
+    expect(Math.abs(antes - depois)).toBeLessThan(0.5);
+    expect(depois).toBeGreaterThan(15);
+    const praia = set.getHeight(AURORA_PLACES.beach.x, AURORA_PLACES.beach.z);
+    expect(praia).toBeGreaterThan(0);
+    expect(praia).toBeLessThan(2.5);
+    expect(set.getHeight(280, -130)).toBeLessThan(-5); // mar aberto no meio
+    expect(regionAt(AURORA_PLACES.observatory.x, AURORA_PLACES.observatory.z)?.id).toBe('observatorio');
+  });
+});

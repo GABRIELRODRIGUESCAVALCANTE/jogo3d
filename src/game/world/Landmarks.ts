@@ -13,7 +13,7 @@ import type { InteractionSystem } from '../InteractionSystem';
 import type { LightManager, LightSource } from '../LightManager';
 import { createFlatMaterial, jitter, merge, paint, part } from '../models/geometry';
 import { makeBroadleafTree } from '../models/props';
-import type { Terrain } from './Terrain';
+import type { HeightField } from './Terrain';
 import { PLACES, type Place } from './layout';
 
 export interface LandmarkHooks {
@@ -83,7 +83,7 @@ export class Landmarks {
   private readonly portalUniforms = { uTime: { value: 0 }, uActive: { value: 0 } };
 
   constructor(
-    private readonly terrain: Terrain,
+    private readonly terrain: HeightField,
     private readonly collision: CollisionWorld,
     private readonly interaction: InteractionSystem,
     private readonly lights: LightManager,

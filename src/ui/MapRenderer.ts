@@ -3,9 +3,9 @@
  * Áreas não exploradas ficam cobertas por uma "névoa" cor de pergaminho.
  * Usado tanto pelo minimapa do HUD quanto pelo mapa grande.
  */
-import { EXPLORE_RES, type WorldState } from '../game/WorldState';
-import type { Terrain } from '../game/world/Terrain';
-import { WATER_LEVEL, WORLD_HALF, WORLD_SIZE, distanceToPaths } from '../game/world/layout';
+import type { ExploreGrid, WorldState } from '../game/WorldState';
+import type { HeightField } from '../game/world/Terrain';
+import { WATER_LEVEL } from '../game/world/layout';
 
 export interface MapMarker {
   x: number;
@@ -22,7 +22,6 @@ export interface MapView {
   markers: MapMarker[];
 }
 
-const SIZE = WORLD_SIZE; // 1 pixel = 1 metro
 const FOG = [233, 220, 192];
 
 export class MapRenderer {
@@ -31,25 +30,43 @@ export class MapRenderer {
   private readonly fog = document.createElement('canvas');
   private version = -1;
 
-  constructor(terrain: Terrain) {
+  /** Lado do mapa em pixels (1 pixel = 1 metro) e canto noroeste da ilha. */
+  private readonly size: number;
+  private readonly minX: number;
+  private readonly minZ: number;
+
+  constructor(
+    terrain: HeightField,
+    private readonly grid: ExploreGrid,
+    private readonly pathDistance?: (x: number, z: number) => number,
+  ) {
+    this.size = grid.size;
+    this.minX = grid.cx - grid.size / 2;
+    this.minZ = grid.cz - grid.size / 2;
     for (const c of [this.base, this.composed]) {
-      c.width = SIZE;
-      c.height = SIZE;
+      c.width = this.size;
+      c.height = this.size;
     }
-    this.fog.width = EXPLORE_RES;
-    this.fog.height = EXPLORE_RES;
+    this.fog.width = grid.res;
+    this.fog.height = grid.res;
     this.renderBase(terrain);
   }
 
+  /** O ponto está dentro da área deste mapa? */
+  covers(x: number, z: number): boolean {
+    return x >= this.minX && z >= this.minZ && x < this.minX + this.size && z < this.minZ + this.size;
+  }
+
   /** Pinta o relevo uma única vez (com sombreamento para dar volume). */
-  private renderBase(terrain: Terrain): void {
+  private renderBase(terrain: HeightField): void {
     const ctx = this.base.getContext('2d')!;
+    const SIZE = this.size;
     const img = ctx.createImageData(SIZE, SIZE);
     const data = img.data;
     for (let py = 0; py < SIZE; py++) {
       for (let px = 0; px < SIZE; px++) {
-        const x = px - WORLD_HALF + 0.5;
-        const z = py - WORLD_HALF + 0.5;
+        const x = this.minX + px + 0.5;
+        const z = this.minZ + py + 0.5;
         const h = terrain.getHeight(x, z);
         let r: number;
         let g: number;
@@ -70,7 +87,7 @@ export class MapRenderer {
           r = 120 - t * 50;
           g = 200 - t * 60;
           b = 85 - t * 20;
-          if (distanceToPaths(x, z) < 1.8) [r, g, b] = [205, 170, 115];
+          if (this.pathDistance && this.pathDistance(x, z) < 1.8) [r, g, b] = [205, 170, 115];
         }
         // Sombreamento: compara com a altura a noroeste.
         const shade = h > WATER_LEVEL ? (h - terrain.getHeight(x - 1.5, z - 1.5)) * 18 : 0;
@@ -89,16 +106,19 @@ export class MapRenderer {
     if (state.exploredVersion === this.version) return;
     this.version = state.exploredVersion;
     const fctx = this.fog.getContext('2d')!;
-    const img = fctx.createImageData(EXPLORE_RES, EXPLORE_RES);
-    for (let i = 0; i < state.explored.length; i++) {
+    const res = this.grid.res;
+    const explored = this.grid.data;
+    const img = fctx.createImageData(res, res);
+    for (let i = 0; i < explored.length; i++) {
       img.data[i * 4] = FOG[0];
       img.data[i * 4 + 1] = FOG[1];
       img.data[i * 4 + 2] = FOG[2];
       // A névoa deixa ver levemente o contorno da ilha, mas esconde os detalhes.
-      img.data[i * 4 + 3] = state.explored[i] ? 0 : 228;
+      img.data[i * 4 + 3] = explored[i] ? 0 : 228;
     }
     fctx.putImageData(img, 0, 0);
     const ctx = this.composed.getContext('2d')!;
+    const SIZE = this.size;
     ctx.clearRect(0, 0, SIZE, SIZE);
     ctx.drawImage(this.base, 0, 0);
     ctx.imageSmoothingEnabled = true;
@@ -121,13 +141,13 @@ export class MapRenderer {
     ctx.translate(w / 2, w / 2);
     ctx.rotate(view.cameraYaw);
     ctx.scale(scale, scale);
-    ctx.translate(-(view.playerX + WORLD_HALF), -(view.playerZ + WORLD_HALF));
+    ctx.translate(-(view.playerX - this.minX), -(view.playerZ - this.minZ));
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.composed, 0, 0);
     // Marcadores (desenhados sem distorcer pelo zoom).
     for (const m of view.markers) {
-      const mx = m.x + WORLD_HALF;
-      const mz = m.z + WORLD_HALF;
+      const mx = m.x - this.minX;
+      const mz = m.z - this.minZ;
       ctx.save();
       ctx.translate(mx, mz);
       ctx.rotate(-view.cameraYaw);
@@ -201,6 +221,7 @@ export class MapRenderer {
     const ctx = canvas.getContext('2d')!;
     const w = canvas.width;
     const h = canvas.height;
+    const SIZE = this.size;
     const scale = Math.min(w, h) / SIZE;
     const ox = (w - SIZE * scale) / 2;
     const oy = (h - SIZE * scale) / 2;
@@ -211,7 +232,7 @@ export class MapRenderer {
     ctx.drawImage(this.composed, ox, oy, SIZE * scale, SIZE * scale);
     const unit = Math.max(1, w / 360);
 
-    const toScreen = (x: number, z: number) => [ox + (x + WORLD_HALF) * scale, oy + (z + WORLD_HALF) * scale];
+    const toScreen = (x: number, z: number) => [ox + (x - this.minX) * scale, oy + (z - this.minZ) * scale];
 
     ctx.font = `700 ${Math.round(11 * unit)}px Fredoka, Nunito, sans-serif`;
     ctx.textAlign = 'center';

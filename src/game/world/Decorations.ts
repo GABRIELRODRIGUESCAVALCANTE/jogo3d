@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { createRandom, randRange } from '../../core/math';
 import { addWind, createFlatMaterial } from '../models/geometry';
 import { makeDriftwood, makeFern, makeFlower, makeGrassTuft, makeShell } from '../models/props';
-import type { Terrain } from './Terrain';
+import type { HeightField } from './Terrain';
 import { PLACES, WORLD_SEED, distanceToPaths } from './layout';
 
 interface DecoLayer {
@@ -20,14 +20,22 @@ export class Decorations {
   private layers: DecoLayer[] = [];
 
   constructor(
-    private readonly terrain: Terrain,
+    private readonly terrain: HeightField,
     private readonly windTime: { value: number },
   ) {
     this.group.name = 'Decorações';
   }
 
-  generate(): void {
-    const random = createRandom(WORLD_SEED + 2);
+  /** Centro e meia-largura da área onde as decorações são espalhadas. */
+  private center = { x: 0, z: 0 };
+  private extent = 168;
+
+  generate(area?: { x: number; z: number; extent: number; seed: number }): void {
+    if (area) {
+      this.center = { x: area.x, z: area.z };
+      this.extent = area.extent;
+    }
+    const random = createRandom(WORLD_SEED + 2 + (area?.seed ?? 0));
     const grassMat = createFlatMaterial({ side: THREE.DoubleSide });
     addWind(grassMat, this.windTime, 0.15, 0.05);
 
@@ -76,8 +84,8 @@ export class Decorations {
     let attempts = 0;
     while (placed < count && attempts < count * 40) {
       attempts++;
-      const x = randRange(random, -168, 168);
-      const z = randRange(random, -168, 168);
+      const x = this.center.x + randRange(random, -this.extent, this.extent);
+      const z = this.center.z + randRange(random, -this.extent, this.extent);
       const h = this.terrain.getHeight(x, z);
       const slope = this.terrain.getSlope(x, z);
       if (!accept(x, z, h, slope)) continue;

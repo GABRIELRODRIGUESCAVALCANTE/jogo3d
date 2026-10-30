@@ -200,7 +200,7 @@ export class HUD {
     this.minimapTimer -= dt;
     if (this.minimapTimer <= 0) {
       this.minimapTimer = 0.1;
-      g.mapRenderer.drawMinimap(this.minimap, g.worldState, g.mapView());
+      g.currentMap.drawMinimap(this.minimap, g.worldState, g.mapView());
     }
   }
 
@@ -277,7 +277,11 @@ export class HUD {
     } else {
       this.buildEl.classList.add('hidden');
       const action = g.interaction.currentAction;
-      if (g.fishing.active && g.isPlaying) {
+      if (g.boatCtl.active && g.isPlaying) {
+        text = touch ? 'Joystick conduz o barco' : 'Navegando: W/S velocidade · A/D direção · [E] desembarcar';
+        cls = 'muted';
+        if (text.includes('[E]')) text = '[E] Desembarcar · W/S velocidade · A/D direção';
+      } else if (g.fishing.active && g.isPlaying) {
         const bite = g.fishing.state === 'bite';
         text = bite && !touch ? '[E] Puxe agora!' : g.fishing.prompt;
         cls = bite ? 'ok' : 'muted';
@@ -293,7 +297,7 @@ export class HUD {
     const key = `${text}|${cls}`;
     if (key === this.lastPrompt) return;
     this.lastPrompt = key;
-    const hideOnTouch = touch && g.building.mode === 'none' && !g.fishing.active;
+    const hideOnTouch = touch && g.building.mode === 'none' && !g.fishing.active && !g.boatCtl.active;
     this.promptEl.className = `prompt ${cls} ${!text || hideOnTouch ? 'hidden' : ''}`;
     this.promptEl.innerHTML = text.startsWith('[E] ') ? `<kbd>E</kbd>${escapeHtml(text.slice(4))}` : escapeHtml(text);
   }

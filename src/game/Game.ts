@@ -11,6 +11,11 @@ import { clamp, smoothstep } from '../core/math';
 import { DAY_LENGTH_SECONDS, QUALITY_PRESETS, Settings } from '../core/Settings';
 import { BuildingSystem, type PlacedStructure } from './Building';
 import { FishingSystem } from './Fishing';
+import { BoatController } from './Boat';
+import { AURORA_CENTER } from './world/islands';
+import { WORLD_LIMIT_RADIUS, distanceToPaths } from './world/layout';
+import { AURORA_PLACES, auroraPathDistance } from './world/islands';
+import type { NodeSave } from './save/SaveData';
 import { CameraController } from './CameraController';
 import { CollisionWorld } from './Collision';
 import { CraftingSystem } from './Crafting';
@@ -73,10 +78,13 @@ export class Game {
   readonly models = new ModelLibrary();
   wildlife!: Wildlife;
   fishing!: FishingSystem;
+  boatCtl!: BoatController;
+  auroraWildlife: Wildlife | null = null;
   readonly player = new Player();
   world!: World;
   building!: BuildingSystem;
   mapRenderer!: MapRenderer;
+  auroraMap: MapRenderer | null = null;
   ui!: UIManager;
 
   // --- Estado ---
@@ -112,6 +120,30 @@ export class Game {
   private readonly tmpVec = new THREE.Vector3();
   private readonly interactionCtx: InteractionContext;
   private dustTimer = 0;
+  private cameraDistanceBeforeBoat = 7.5;
+  /** Estado salvo dos recursos (inclui os da Aurora antes de ela ser criada). */
+  private pendingNodes: Record<string, NodeSave> | undefined;
+  /** Mantém quem nada perto de alguma ilha (o mar aberto só se cruza de barco). */
+  private readonly clampToWorld = (pos: THREE.Vector3): boolean => {
+    const islands = [
+      { x: 0, z: 0, r: WORLD_LIMIT_RADIUS },
+      { x: AURORA_CENTER.x, z: AURORA_CENTER.z, r: 132 },
+    ];
+    let nearest = islands[0];
+    let bestGap = Infinity;
+    for (const isl of islands) {
+      const gap = Math.hypot(pos.x - isl.x, pos.z - isl.z) - isl.r;
+      if (gap <= 0) return false;
+      if (gap < bestGap) {
+        bestGap = gap;
+        nearest = isl;
+      }
+    }
+    const d = Math.hypot(pos.x - nearest.x, pos.z - nearest.z);
+    pos.x = nearest.x + ((pos.x - nearest.x) / d) * nearest.r;
+    pos.z = nearest.z + ((pos.z - nearest.z) / d) * nearest.r;
+    return true;
+  };
   /** 0 = sem aviso; 1 = avisou "com fome"; 2 = avisou "faminto". */
   private hungerWarned = 0;
   private characterLoaded = '';
@@ -190,7 +222,7 @@ export class Game {
     this.world.scene.add(this.player.object);
     this.world.scene.add(this.particles.mesh);
     this.world.scene.add(this.shadowBlob);
-    this.mapRenderer = new MapRenderer(this.world.terrain);
+    this.mapRenderer = new MapRenderer(this.world.terrain, this.worldState.grids.principal, distanceToPaths);
     this.wildlife = new Wildlife(this.world.terrain, this.collision, this.models);
     this.wildlife.build();
     this.wildlife.onSplash = (x, z) => this.particles.burst(this.tmpVec.set(x, 0.05, z), '#d8f6ff', 6, { up: 2.5, speed: 1.2, size: 0.1, life: 0.5 });
@@ -208,6 +240,25 @@ export class Game {
       addXP: (n) => this.progression.addXP(n),
     });
     this.interaction.addProvider(this.fishing);
+    this.boatCtl = new BoatController(this.player, this.world.terrain, {
+      splash: (pos) => this.particles.burst(pos, '#e8fbff', 3, { up: 1.5, speed: 1.2, size: 0.12, life: 0.6 }),
+      sound: (name) => this.audio.play(name),
+      notify: (text) => this.ui.notify.toast(text, 'info', 'barco'),
+    });
+    this.world.onAuroraCreated = () => {
+      this.auroraWildlife = new Wildlife(this.world.terrain, this.collision, this.models, {
+        x: AURORA_CENTER.x,
+        z: AURORA_CENTER.z,
+        scale: 0.7,
+        seed: 3,
+      });
+      this.auroraWildlife.onSplash = this.wildlife.onSplash;
+      this.auroraWildlife.build();
+      this.auroraWildlife.setDensity(this.settings.preset.decorationDensity);
+      this.world.scene.add(this.auroraWildlife.group);
+      this.world.auroraResources!.load(this.pendingNodes);
+      this.auroraMap = new MapRenderer(this.world.terrain, this.worldState.grids.aurora, auroraPathDistance);
+    };
     this.world.scene.add(this.fishing.group);
 
     this.torchLight = this.lights.add({
@@ -280,7 +331,9 @@ export class Game {
 
       this.world.update(dt, this.elapsed, focus, this.camera, simulate);
       this.particles.update(dt);
-      this.wildlife.update(dt, this.elapsed, focus, this.state === 'playing' && this.player.speed > 6.5, this.world.dayNight.night);
+      const running = this.state === 'playing' && this.player.speed > 6.5;
+      this.wildlife.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
+      this.auroraWildlife?.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
       this.lights.update(dt, focus, this.world.dayNight.night);
       this.audio.update(dt);
       if (this.state === 'playing') this.ui.update(dt);
@@ -317,19 +370,33 @@ export class Game {
         if (input.actionPressed('interact')) this.building.confirmPlacement();
       }
 
-      this.player.update(
-        dt,
-        {
-          move: input.getMove(),
-          sprint: input.isSprinting(),
-          jump: input.actionPressed('jump'),
-          jumpHeld: input.actionHeld('jump'),
-        },
-        this.cameraCtl.yaw,
-        { getHeight, collision: this.collision },
-      );
+      const sailing = this.boatCtl.active;
+      if (sailing) {
+        // A bordo: o movimento controla o barco; E desembarca.
+        this.boatCtl.update(dt, input.getMove(), input.isSprinting(), this.elapsed);
+        if (input.actionPressed('interact') && this.boatCtl.disembark()) {
+          this.player.stand();
+          this.cameraCtl.distance = this.cameraDistanceBeforeBoat;
+          this.ui.notify.toast('Você desembarcou.', 'info', 'barco');
+        }
+      } else {
+        this.player.update(
+          dt,
+          {
+            move: input.getMove(),
+            sprint: input.isSprinting(),
+            jump: input.actionPressed('jump'),
+            jumpHeld: input.actionHeld('jump'),
+          },
+          this.cameraCtl.yaw,
+          { getHeight, collision: this.collision, clampToWorld: this.clampToWorld },
+        );
+      }
 
-      if (this.fishing.active) {
+      if (sailing) {
+        this.interaction.current = null;
+        this.interaction.currentAction = null;
+      } else if (this.fishing.active) {
         if (input.actionPressed('interact')) this.fishing.press();
         this.interaction.current = null;
         this.interaction.currentAction = null;
@@ -339,7 +406,8 @@ export class Game {
         this.interaction.current = null;
         this.interaction.currentAction = null;
       }
-      this.world.resources.update(dt, this.playTime, this.player.position);
+      for (const rm of this.world.resourceManagers) rm.update(dt, this.playTime, this.player.position);
+      this.checkAurora();
       this.fishing.update(dt);
       this.updateSurvival(dt);
 
@@ -390,7 +458,8 @@ export class Game {
     // Botão de interação no celular.
     if (this.controlMode === 'touch') {
       const action = this.interaction.currentAction;
-      if (this.fishing.active) this.ui.touch.setInteraction(this.fishing.state === 'bite' ? 'Puxar!' : 'Pescando…', this.fishing.state === 'bite');
+      if (this.boatCtl.active) this.ui.touch.setInteraction('Desembarcar', true);
+      else if (this.fishing.active) this.ui.touch.setInteraction(this.fishing.state === 'bite' ? 'Puxar!' : 'Pescando…', this.fishing.state === 'bite');
       else this.ui.touch.setInteraction(action?.label ?? null, action?.enabled ?? false);
     }
 
@@ -571,6 +640,7 @@ export class Game {
       if (!this.player.isActing) this.player.emote('acenar');
       ui.notify.banner(q.title, 'Missão concluída!', 'missao', 'quest');
       if (q.completeText) ui.notify.toast(q.completeText, 'info', 'estrela');
+      if (questId === 'q_observatorio') void this.showChapter2Ending();
       ui.hud.markQuestsDirty();
       ui.refresh('missoes');
       this.autosaveTimer = Math.min(this.autosaveTimer, 2);
@@ -835,7 +905,9 @@ export class Game {
     this.world.setShadows(preset.shadows, preset.shadowMapSize);
     this.world.setRenderDistance(preset.renderDistance);
     this.world.decorations.setDensity(preset.decorationDensity);
+    this.world.auroraDecorations?.setDensity(preset.decorationDensity);
     this.wildlife?.setDensity(preset.decorationDensity);
+    this.auroraWildlife?.setDensity(preset.decorationDensity);
     this.lights.setCount(preset.maxPointLights);
     this.shadowBlob.visible = !preset.shadows;
     // Materiais precisam ser recompilados quando as sombras mudam.
@@ -879,6 +951,32 @@ export class Game {
       return;
     }
     this.player.setAvatar(model, ROBOT_HEIGHT);
+  }
+
+  /** Cria a Ilha da Aurora quando o jogador chega perto (carregamento sob demanda). */
+  private checkAurora(): void {
+    if (this.world.auroraCreated) return;
+    const p = this.player.position;
+    if (Math.hypot(p.x - AURORA_CENTER.x, p.z - AURORA_CENTER.z) < 340) {
+      this.createAurora(false);
+      this.ui.notify.toast('Terra à vista! A Ilha da Aurora surge no horizonte.', 'quest', 'barco');
+    }
+  }
+
+  /** `immediate`: monta todo o terreno de uma vez (ao carregar um jogo salvo lá). */
+  private createAurora(immediate: boolean): void {
+    this.world.createAurora(this.settings.preset.decorationDensity);
+    if (immediate) this.world.terrain.get('aurora').buildMeshes();
+  }
+
+  /** Estados dos recursos de todas as ilhas (os ainda não criados vêm do salvamento). */
+  private saveNodes(): Record<string, NodeSave> {
+    const out: Record<string, NodeSave> = {};
+    if (!this.world.auroraResources && this.pendingNodes) {
+      for (const [id, n] of Object.entries(this.pendingNodes)) if (id.startsWith('aurora:')) out[id] = n;
+    }
+    for (const rm of this.world.resourceManagers) Object.assign(out, rm.toJSON());
+    return out;
   }
 
   /** Fome e desgaste da tocha acesa. */
@@ -1008,7 +1106,13 @@ export class Game {
     this.inventory.load({});
     this.progression.load({ xp: 0 });
     this.building.clear();
-    this.world.resources.load(undefined);
+    for (const rm of this.world.resourceManagers) rm.load(undefined);
+    this.world.auroraLandmarks?.applyFlags();
+    if (this.boatCtl.active) {
+      this.boatCtl.boat!.boarded = false;
+      this.boatCtl.boat = null;
+      this.player.stand();
+    }
     this.world.landmarks.applyFlags();
     this.quests.reset();
     this.world.dayNight.day = 1;
@@ -1029,11 +1133,23 @@ export class Game {
   }
 
   private applySave(data: SaveData): void {
-    this.worldState.load({ flags: data.world.flags, regions: data.world.regions, explored: data.world.explored });
+    this.worldState.load({
+      flags: data.world.flags,
+      regions: data.world.regions,
+      explored: data.world.explored,
+      exploredAurora: data.world.exploredAurora,
+    });
     this.inventory.load(data.inventory, data.durability);
     this.progression.load(data.progression);
+    // A Aurora é criada já no carregamento se o jogador estava lá ou tem algo construído lá.
+    const nearAurora = (x: number, z: number) => Math.hypot(x - AURORA_CENTER.x, z - AURORA_CENTER.z) < 360;
+    if (nearAurora(data.player.x, data.player.z) || data.structures.some((st) => nearAurora(st.x, st.z))) {
+      this.createAurora(true);
+    }
     this.building.load(data.structures);
-    this.world.resources.load(data.world.nodes);
+    this.pendingNodes = data.world.nodes;
+    for (const rm of this.world.resourceManagers) rm.load(data.world.nodes);
+    this.world.auroraLandmarks?.applyFlags();
     this.world.landmarks.applyFlags();
     this.quests.load(data.quests);
     this.quests.evaluateAll();
@@ -1077,8 +1193,9 @@ export class Game {
         day: this.world.dayNight.day,
         flags: [...this.worldState.flags],
         regions: [...this.worldState.discovered],
-        explored: this.worldState.exploredToBase64(),
-        nodes: this.world.resources.toJSON(),
+        explored: this.worldState.exploredToBase64('principal'),
+        exploredAurora: this.worldState.exploredToBase64('aurora'),
+        nodes: this.saveNodes(),
       },
       stats: { ...this.stats },
     };
@@ -1202,6 +1319,13 @@ export class Game {
     this.building.cancel();
   }
 
+  /** Mapa da ilha em que o jogador está (ou da mais próxima). */
+  get currentMap(): MapRenderer {
+    const p = this.player.position;
+    if (this.auroraMap && Math.hypot(p.x - AURORA_CENTER.x, p.z - AURORA_CENTER.z) < Math.hypot(p.x, p.z)) return this.auroraMap;
+    return this.mapRenderer;
+  }
+
   /** Objetivo da missão acompanhada (para o feixe de luz e o mapa). */
   questTarget(): { x: number; z: number } | null {
     const quest = this.quests.tracked;
@@ -1213,7 +1337,18 @@ export class Game {
     const markers: MapMarker[] = [];
     for (const s of this.building.structures) markers.push({ x: s.x, z: s.z, type: 'structure' });
     const ws = this.worldState;
-    const landmarks = [PLACES.monolith, PLACES.cave, PLACES.peak, PLACES.giantTree, PLACES.shipwreck];
+    const landmarks = [
+      PLACES.monolith,
+      PLACES.cave,
+      PLACES.peak,
+      PLACES.giantTree,
+      PLACES.shipwreck,
+      AURORA_PLACES.observatory,
+      AURORA_PLACES.loreStone,
+      AURORA_PLACES.pylonWest,
+      AURORA_PLACES.pylonEast,
+      AURORA_PLACES.pylonSouth,
+    ];
     for (const l of landmarks) if (ws.isExplored(l.x, l.z)) markers.push({ x: l.x, z: l.z, type: 'landmark' });
     const chests: Array<[string, { x: number; z: number }]> = [
       ['bau_praia', PLACES.chestBeach],
@@ -1280,6 +1415,18 @@ export class Game {
         this.ui.openPanel('fabricacao');
       },
       openStorage: (structure: PlacedStructure) => this.ui.openStorage(structure),
+      hasFlag: (flag: string) => this.worldState.hasFlag(flag),
+      boardBoat: (structure: PlacedStructure) => {
+        this.boatCtl.board(structure);
+        this.cameraDistanceBeforeBoat = this.cameraCtl.distance;
+        this.cameraCtl.distance = Math.max(this.cameraCtl.distance, 10);
+        this.worldState.setFlag('navegou');
+        this.ui.notify.toast(
+          this.controlMode === 'touch' ? 'A bordo! Use o joystick para navegar e o botão para desembarcar.' : 'A bordo! W/S velocidade, A/D direção, E desembarca.',
+          'info',
+          'barco',
+        );
+      },
       playerPosition: () => this.player.position,
       playerYaw: () => this.player.yaw,
       playTime: () => this.playTime,
@@ -1301,6 +1448,26 @@ export class Game {
     this.player.energy = this.player.maxEnergy;
     void this.saveGame(true);
     this.ui.notify.toast('Você descansou: energia restaurada. (À noite, a cama permite dormir até o amanhecer.)', 'success', 'raio');
+  }
+
+  private async showChapter2Ending(): Promise<void> {
+    await this.ui.dialogs.custom(
+      `
+      <div class="ending">
+        <div class="welcome-icon">${icon('estrela')}</div>
+        <h2>Fim do Capítulo 2: A Aurora</h2>
+        <p>Você atravessou o mar, despertou os pilares e reacendeu o Observatório dos Lumeni. Volte à Aurora à noite para ver o céu iluminado!</p>
+        <div class="pause-stats">
+          <div><span>Nível</span><b>${this.progression.level}</b></div>
+          <div><span>Dias</span><b>${this.world.dayNight.day}</b></div>
+          <div><span>Missões</span><b>${this.quests.completed.size}/${this.quests.totalQuests}</b></div>
+          <div><span>Construções</span><b>${this.stats.built}</b></div>
+        </div>
+        <p class="muted">Novas ilhas no mapa de estrelas dos Lumeni chegarão em futuras atualizações.</p>
+      </div>`,
+      'Continuar explorando',
+    );
+    await this.saveGame(false);
   }
 
   private async showEnding(): Promise<void> {

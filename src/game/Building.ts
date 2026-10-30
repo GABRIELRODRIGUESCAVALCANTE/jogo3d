@@ -26,7 +26,7 @@ import type { StructureSave } from './save/SaveData';
 import type { CameraZone } from './world/Landmarks';
 import { PROTECTED_ZONES, WATER_LEVEL } from './world/layout';
 import type { ResourceManager } from './world/ResourceNodes';
-import type { Terrain } from './world/Terrain';
+import type { HeightField } from './world/Terrain';
 
 /** Segundos de jogo para a batata-doce crescer no canteiro. */
 export const CROP_GROW_SECONDS = 240;
@@ -46,6 +46,8 @@ export interface BuildingHooks {
   playerPosition(): THREE.Vector3;
   playerYaw(): number;
   playTime(): number;
+  hasFlag(flag: string): boolean;
+  boardBoat(structure: PlacedStructure): void;
 }
 
 export interface PlacedStructure {
@@ -69,6 +71,8 @@ export interface PlacedStructure {
   plantedAt?: number;
   /** Animação da tampa do baú (0 fechado, 1 aberto). */
   lidOpen?: number;
+  /** Barco com o jogador a bordo (não pode ser removido). */
+  boarded?: boolean;
 }
 
 export type BuildMode = 'none' | 'place' | 'remove';
@@ -106,7 +110,7 @@ export class BuildingSystem implements InteractableProvider {
   private roofZones: CameraZone[] = [];
 
   constructor(
-    private readonly terrain: Terrain,
+    private readonly terrain: HeightField,
     private readonly collision: CollisionWorld,
     private readonly resources: ResourceManager,
     private readonly lights: LightManager,
@@ -136,6 +140,7 @@ export class BuildingSystem implements InteractableProvider {
   /** Motivo pelo qual não é possível começar a construir (ou null se pode). */
   canStart(type: StructureId): string | null {
     const def = STRUCTURES[type];
+    if (def.requiresFlag && !this.hooks.hasFlag(def.requiresFlag.flag)) return def.requiresFlag.reason;
     if (this.hooks.level() < def.minLevel) return `Requer nível ${def.minLevel}`;
     if (def.limit && this.count(type) >= def.limit) return `Limite de ${def.limit} atingido`;
     if (!this.hooks.inventory.hasAll(def.cost)) return 'Materiais insuficientes';
@@ -174,6 +179,8 @@ export class BuildingSystem implements InteractableProvider {
       this.ghostRot = Math.abs(Math.cos(yaw)) > Math.abs(Math.sin(yaw)) ? 0 : Math.PI / 2;
     } else if (STRUCTURES[type].modular) {
       this.ghostRot = 0;
+    } else if (STRUCTURES[type].onWater) {
+      this.ghostRot = this.snapAngle(yaw); // proa apontando para o mar
     } else {
       this.ghostRot = this.snapAngle(yaw + Math.PI);
     }
@@ -289,7 +296,7 @@ export class BuildingSystem implements InteractableProvider {
         }
       } else {
         // À frente do jogador, longe o bastante para não ficar escondido atrás dele.
-        const dist = def.footprint.d / 2 + Math.max(def.footprint.w, def.footprint.d) * 0.2 + 2.2;
+        const dist = def.onWater ? 7 : def.footprint.d / 2 + Math.max(def.footprint.w, def.footprint.d) * 0.2 + 2.2;
         x = Math.round((p.x + Math.sin(yaw) * dist) * 2) / 2;
         z = Math.round((p.z + Math.cos(yaw) * dist) * 2) / 2;
       }
@@ -320,6 +327,7 @@ export class BuildingSystem implements InteractableProvider {
     }
 
     if (def.modular) return this.validateModular(type, x, z, rot, y, min, max);
+    if (def.onWater) return this.validateWater(type, x, z, rot, max);
 
     if (min < WATER_LEVEL + 0.3) return fail('Não é possível construir na água');
     if (max - min > def.maxSlope) return fail('Terreno muito inclinado');
@@ -372,6 +380,26 @@ export class BuildingSystem implements InteractableProvider {
       if (circleOverlapsBox(p.x, p.z, 0.45, x, z, hw, hd, rot)) return fail('Saia de cima do local');
     }
     return { ok: true, y };
+  }
+
+  /** Barco: precisa de água com alguma profundidade e terra firme por perto. */
+  private validateWater(type: StructureId, x: number, z: number, rot: number, max: number): PlacementCheck {
+    const def = STRUCTURES[type];
+    const fail = (reason: string): PlacementCheck => ({ ok: false, reason, y: WATER_LEVEL });
+    const center = this.terrain.getHeight(x, z);
+    if (center > WATER_LEVEL - 0.5 || max > WATER_LEVEL + 0.2) return fail('O barco precisa ficar na água (um pouco mais para dentro do mar)');
+    let shore = false;
+    for (let i = 0; i < 16 && !shore; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      for (const r of [4, 7, 10, 13]) if (this.terrain.getHeight(x + Math.sin(a) * r, z + Math.cos(a) * r) > 0.3) shore = true;
+    }
+    if (!shore) return fail('Construa perto da praia');
+    const footprint = { x, z, hw: def.footprint.w / 2, hd: def.footprint.d / 2, rot };
+    for (const s of this.structures) {
+      const other = { x: s.x, z: s.z, hw: s.def.footprint.w / 2, hd: s.def.footprint.d / 2, rot: s.rot };
+      if (boxesOverlap(footprint, other)) return fail('Espaço ocupado por outra construção');
+    }
+    return { ok: true, y: WATER_LEVEL };
   }
 
   /** Altura do topo do piso sob uma parede (ou null se não houver piso ao lado). */
@@ -579,6 +607,15 @@ export class BuildingSystem implements InteractableProvider {
       case 'telhado':
         box(0, 0, 1.15, 1.15, 0.55, -0.05); // dá para passar por baixo
         break;
+      case 'barco':
+        structure.use = {
+          id: `${structure.id}:embarcar`,
+          position: new THREE.Vector3(x, y + 0.6, z),
+          radius: 5,
+          getAction: () => ({ label: 'Embarcar no barco', enabled: true }),
+          interact: () => this.hooks.boardBoat(structure),
+        };
+        break;
       case 'cerca':
         box(0, 0, 1.2, 0.12, 1.3);
         break;
@@ -604,7 +641,7 @@ export class BuildingSystem implements InteractableProvider {
       id: `remover:${structure.id}`,
       position: new THREE.Vector3(x, y + (def.modular === 'telhado' ? 0 : 1), z),
       radius: Math.max(def.footprint.w, def.footprint.d) / 2 + 0.5,
-      getAction: () => ({ label: `Remover ${def.name} (devolve 50%)`, enabled: true }),
+      getAction: () => (structure.boarded ? null : { label: `Remover ${def.name} (devolve 50%)`, enabled: true }),
       interact: () => this.remove(structure, true),
     };
 
@@ -782,6 +819,7 @@ export class BuildingSystem implements InteractableProvider {
 
   private baseHeight(type: StructureId, x: number, z: number, rot: number): number {
     const def = STRUCTURES[type];
+    if (def.onWater) return WATER_LEVEL;
     if (type !== 'cabana' && !def.modular) return this.terrain.getHeight(x, z);
     return this.heightRange(x, z, def.footprint.w / 2, def.footprint.d / 2, rot).max;
   }

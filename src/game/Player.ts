@@ -25,6 +25,8 @@ export interface PlayerInput {
 export interface PlayerEnvironment {
   getHeight: (x: number, z: number) => number;
   collision: CollisionWorld;
+  /** Mantém o jogador perto de alguma ilha. Retorna verdadeiro se precisou corrigir. */
+  clampToWorld?: (pos: THREE.Vector3) => boolean;
 }
 
 const WALK_SPEED = 5;
@@ -266,12 +268,15 @@ export class Player {
     pos.z += this.velocity.z * dt;
     pos.y += this.velocity.y * dt;
 
-    // Limite do mundo: o oceano é grande demais para nadar.
-    const distCenter = Math.hypot(pos.x, pos.z);
-    if (distCenter > WORLD_LIMIT_RADIUS) {
-      pos.x *= WORLD_LIMIT_RADIUS / distCenter;
-      pos.z *= WORLD_LIMIT_RADIUS / distCenter;
-      this.onBoundary?.();
+    // Limite do mundo: o oceano é grande demais para nadar (só de barco).
+    if (env.clampToWorld?.(pos)) this.onBoundary?.();
+    else if (!env.clampToWorld) {
+      const distCenter = Math.hypot(pos.x, pos.z);
+      if (distCenter > WORLD_LIMIT_RADIUS) {
+        pos.x *= WORLD_LIMIT_RADIUS / distCenter;
+        pos.z *= WORLD_LIMIT_RADIUS / distCenter;
+        this.onBoundary?.();
+      }
     }
 
     // --- Colisões com obstáculos e chão ---
@@ -307,6 +312,38 @@ export class Player {
     }
 
     this.animate(dt, horizSpeed, groundH, waterDepth);
+  }
+
+  /**
+   * Sentado (no barco): o personagem acompanha o assento, sem física.
+   */
+  sit(seat: THREE.Vector3, yaw: number, dt: number): void {
+    this.position.copy(seat);
+    this.velocity.set(0, 0, 0);
+    this.yaw = yaw;
+    this.speed = 0;
+    this.grounded = true;
+    this.swimming = false;
+    const rig = this.rig;
+    rig.root.position.copy(seat);
+    rig.root.rotation.y = yaw;
+    rig.leftLeg.rotation.x = damp(rig.leftLeg.rotation.x, -1.4, 10, dt);
+    rig.rightLeg.rotation.x = damp(rig.rightLeg.rotation.x, -1.4, 10, dt);
+    rig.leftArm.rotation.x = damp(rig.leftArm.rotation.x, -0.9, 10, dt);
+    rig.rightArm.rotation.x = damp(rig.rightArm.rotation.x, -0.9, 10, dt);
+    rig.body.rotation.x = 0;
+    rig.body.position.y = -0.35;
+    if (this.avatar) {
+      this.avatar.animator.play('Idle', 0.3);
+      this.avatar.root.position.y = -0.3;
+      this.avatar.animator.update(dt);
+    }
+  }
+
+  /** Volta ao normal ao desembarcar. */
+  stand(): void {
+    this.rig.body.position.y = 0;
+    if (this.avatar) this.avatar.root.position.y = 0;
   }
 
   /** Olha para um ponto (usado ao interagir com algo). */

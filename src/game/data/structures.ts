@@ -17,7 +17,8 @@ export type StructureId =
   | 'parede'
   | 'parede_porta'
   | 'parede_janela'
-  | 'telhado';
+  | 'telhado'
+  | 'barco';
 
 /**
  * Peças modulares se encaixam numa grade de 2 m:
@@ -56,6 +57,10 @@ export interface StructureDef {
   modular?: ModularKind;
   /** Categoria no menu de construção. */
   group: 'basico' | 'modular' | 'decoracao';
+  /** Só pode ser construído depois de um marcador da história (ex.: farol aceso). */
+  requiresFlag?: { flag: string; reason: string };
+  /** Construído sobre a água (barco). */
+  onWater?: boolean;
 }
 
 export const STRUCTURES: Record<StructureId, StructureDef> = {
@@ -238,6 +243,22 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     modular: 'telhado',
     group: 'modular',
   },
+  barco: {
+    id: 'barco',
+    name: 'Barco a Vela',
+    description: 'Construa na água rasa, perto da praia. Embarque e navegue até outras ilhas.',
+    icon: 'barco',
+    cost: { madeira: 30, corda: 8, fibra: 12 },
+    minLevel: 5,
+    footprint: { w: 1.8, d: 4.4 },
+    maxSlope: 99,
+    xp: 60,
+    limit: 2,
+    solid: false,
+    group: 'basico',
+    requiresFlag: { flag: 'farol', reason: 'Disponível depois de acender o Farol dos Lumeni' },
+    onWater: true,
+  },
 };
 
 export const STRUCTURE_ORDER: StructureId[] = [
@@ -246,6 +267,7 @@ export const STRUCTURE_ORDER: StructureId[] = [
   'cabana',
   'bau',
   'canteiro',
+  'barco',
   'piso',
   'parede',
   'parede_porta',

@@ -35,7 +35,7 @@ function sample(): SaveData {
       { id: 'bau_1', type: 'bau', x: 34, z: 60, rot: 0, data: { madeira: 5 } },
       { id: 'parede_1', type: 'parede', x: 31, z: 64, rot: 0, y: 6.2 },
     ],
-    world: { time: 13.5, day: 2, flags: ['bau_praia'], regions: ['praia'], explored: '', nodes: { arvore_1: { r: 0, t: 500 } } },
+    world: { time: 13.5, day: 2, flags: ['bau_praia'], regions: ['praia'], explored: '', exploredAurora: '', nodes: { arvore_1: { r: 0, t: 500 } } },
     stats: { gathered: 20, crafted: 2, built: 1 },
   };
 }
