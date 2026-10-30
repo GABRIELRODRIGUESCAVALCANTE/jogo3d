@@ -5,7 +5,7 @@
  */
 import type { QuestSaveState } from '../Quests';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface StructureSave {
   id: string;
@@ -13,6 +13,10 @@ export interface StructureSave {
   x: number;
   z: number;
   rot: number;
+  /** Altura (peças modulares empilhadas); ausente = altura do terreno. */
+  y?: number;
+  /** Conteúdo do baú ou estado do canteiro. */
+  data?: Record<string, number | string>;
 }
 
 /** Estado de um recurso: quantidade restante e momento de renascer. */
@@ -33,8 +37,12 @@ export interface SaveData {
     energy: number;
     torch: boolean;
     buffTime: number;
+    /** Saciedade (0 a 100). */
+    hunger: number;
   };
   inventory: Record<string, number>;
+  /** Durabilidade restante das ferramentas. */
+  durability: Record<string, number>;
   progression: { xp: number };
   quests: QuestSaveState;
   structures: StructureSave[];
@@ -44,6 +52,8 @@ export interface SaveData {
     flags: string[];
     regions: string[];
     explored: string;
+    /** Névoa do mapa da Ilha da Aurora. */
+    exploredAurora?: string;
     nodes: Record<string, NodeSave>;
   };
   stats: { gathered: number; crafted: number; built: number };
@@ -70,6 +80,12 @@ export function migrateSave(raw: Record<string, unknown>): Record<string, unknow
     data.stats = { gathered: 0, crafted: 0, built: 0 };
     data.version = 1;
   }
+  if ((data.version as number) < 2) {
+    // Versão 2: fome e durabilidade (ferramentas antigas ficam novas).
+    if (isObj(data.player)) data.player = { ...data.player, hunger: 100 };
+    data.durability = {};
+    data.version = 2;
+  }
   return data;
 }
 
@@ -87,7 +103,14 @@ export function validateSave(input: unknown): SaveData | null {
   const structures: StructureSave[] = [];
   for (const s of data.structures) {
     if (isObj(s) && typeof s.type === 'string' && typeof s.id === 'string' && isNum(s.x) && isNum(s.z) && isNum(s.rot)) {
-      structures.push({ id: s.id, type: s.type, x: s.x, z: s.z, rot: s.rot });
+      const item: StructureSave = { id: s.id, type: s.type, x: s.x, z: s.z, rot: s.rot };
+      if (isNum(s.y)) item.y = s.y;
+      if (isObj(s.data)) {
+        item.data = Object.fromEntries(
+          Object.entries(s.data).filter(([, v]) => isNum(v) || typeof v === 'string'),
+        ) as Record<string, number | string>;
+      }
+      structures.push(item);
     }
   }
   const nodes: Record<string, NodeSave> = {};
@@ -111,7 +134,11 @@ export function validateSave(input: unknown): SaveData | null {
       energy: isNum(player.energy) ? player.energy : 100,
       torch: player.torch === true,
       buffTime: isNum(player.buffTime) ? player.buffTime : 0,
+      hunger: isNum(player.hunger) ? player.hunger : 100,
     },
+    durability: isObj(data.durability)
+      ? (Object.fromEntries(Object.entries(data.durability).filter(([, v]) => isNum(v))) as Record<string, number>)
+      : {},
     inventory: Object.fromEntries(
       Object.entries(data.inventory as Record<string, unknown>).filter(([, v]) => isNum(v)),
     ) as Record<string, number>,
@@ -129,6 +156,7 @@ export function validateSave(input: unknown): SaveData | null {
       flags: Array.isArray(world.flags) ? world.flags.filter((f): f is string => typeof f === 'string') : [],
       regions: Array.isArray(world.regions) ? world.regions.filter((r): r is string => typeof r === 'string') : [],
       explored: typeof world.explored === 'string' ? world.explored : '',
+      exploredAurora: typeof world.exploredAurora === 'string' ? world.exploredAurora : '',
       nodes,
     },
     stats: {

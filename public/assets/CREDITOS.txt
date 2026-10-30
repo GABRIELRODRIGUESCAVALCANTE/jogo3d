@@ -1,0 +1,16 @@
+Além do Horizonte — créditos de recursos de terceiros
+
+Modelos 3D (public/assets/models)
+- robo.glb — "RobotExpressive" por Tomás Laulhé (Quaternius), modificações de Don McCurdy.
+  Licença: CC0 1.0 (domínio público). Fonte: exemplos do three.js.
+- raposa.glb — "Fox" do glTF-Sample-Assets (Khronos Group).
+  Modelo: PixelMannen — CC0 1.0.
+  Rigging e animação: tomkranis — CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+  Conversão para glTF: @AsoboStudio e @scurest — CC BY 4.0.
+
+Sons (public/assets/sounds)
+- Efeitos de pulo, aterrissagem, coleta, construção, remoção, giro, clique, impacto,
+  quebra e equipar: Kenney (kenney.nl), Starter Kits 3D Platformer, City Builder,
+  FPS e Racing. Licença: CC0 1.0. Convertidos para MP3.
+
+Fontes: Fredoka e Nunito (SIL Open Font License), via Fontsource.

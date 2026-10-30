@@ -3,8 +3,9 @@
  * "descoberta": aparece no mapa e o jogador ganha experiência.
  */
 import { PLACES } from '../world/layout';
+import { AURORA_CENTER, AURORA_PLACES } from '../world/islands';
 
-export type RegionId = 'praia' | 'floresta' | 'clareira' | 'ruinas' | 'montanhas' | 'caverna' | 'pico';
+export type RegionId = 'praia' | 'floresta' | 'clareira' | 'ruinas' | 'montanhas' | 'caverna' | 'pico' | 'aurora' | 'observatorio';
 
 export interface RegionDef {
   id: RegionId;
@@ -24,6 +25,14 @@ export const REGIONS: RegionDef[] = [
     x: PLACES.cave.x,
     z: PLACES.cave.z,
     radius: 6.5,
+  },
+  {
+    id: 'observatorio',
+    name: 'Observatório dos Lumeni',
+    description: 'Um círculo de colunas no alto da colina, com um telescópio de cristal.',
+    x: AURORA_PLACES.observatory.x,
+    z: AURORA_PLACES.observatory.z,
+    radius: 16,
   },
   {
     id: 'pico',
@@ -64,6 +73,14 @@ export const REGIONS: RegionDef[] = [
     x: 0,
     z: -95,
     radius: 62,
+  },
+  {
+    id: 'aurora',
+    name: 'Ilha da Aurora',
+    description: 'A ilha distante que respondeu ao farol, coberta por uma floresta azulada.',
+    x: AURORA_CENTER.x,
+    z: AURORA_CENTER.z,
+    radius: 135,
   },
   {
     id: 'floresta',

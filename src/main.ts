@@ -58,6 +58,7 @@ async function start(): Promise<void> {
   const uiRoot = document.getElementById('ui-root')!;
   const game = new Game(container, uiRoot);
   window.alemDoHorizonte = game;
+  registerServiceWorker(game);
   try {
     await game.init();
     started = true;
@@ -66,6 +67,34 @@ async function start(): Promise<void> {
     const details = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
     showFatal('Não foi possível iniciar o jogo', 'Ocorreu um erro ao preparar o mundo 3D.', details);
   }
+}
+
+/**
+ * Registra o service worker (só na versão de produção): o jogo passa a abrir
+ * sem internet e pode ser instalado como aplicativo (PWA).
+ * Dentro do app Android (Capacitor) os arquivos já são locais, então não precisa.
+ */
+function registerServiceWorker(game: Game): void {
+  const capacitor = (window as Window & { Capacitor?: unknown }).Capacitor;
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator) || capacitor) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('./sw.js')
+      .then((registration) => {
+        registration.addEventListener('updatefound', () => {
+          const worker = registration.installing;
+          worker?.addEventListener('statechange', () => {
+            // Já havia uma versão antes: esta é uma atualização.
+            if (worker.state === 'activated' && navigator.serviceWorker.controller) {
+              game.ui?.notify.toast('Nova versão do jogo baixada! Ela será usada ao recarregar a página.', 'success', 'estrela');
+            }
+          });
+        });
+      })
+      .catch(() => {
+        /* Sem service worker (ex.: navegação privada): o jogo funciona normalmente online. */
+      });
+  });
 }
 
 // Erros antes de o jogo iniciar viram uma tela de erro; depois, só são registrados.

@@ -18,6 +18,12 @@ export class CameraController {
   distanceLimit = Infinity;
   sensitivity = 1;
   invertY = false;
+  /** Desligado na opção "reduzir movimento". */
+  shakeEnabled = true;
+
+  /** "Trauma" do tremor (0 a 1): cresce com impactos e diminui sozinho. */
+  private trauma = 0;
+  private shakeTime = 0;
 
   private readonly target = new THREE.Vector3();
   private currentDistance = 7.5;
@@ -44,7 +50,22 @@ export class CameraController {
     this.initialized = false;
   }
 
-  update(dt: number, focus: THREE.Vector3, getHeight: (x: number, z: number) => number): void {
+  /** Faz a câmera tremer (queda de árvore, explosão de luz do portal...). */
+  shake(amount: number): void {
+    if (!this.shakeEnabled) return;
+    this.trauma = Math.min(1, this.trauma + amount);
+  }
+
+  /**
+   * @param isBlocked informa se um ponto está dentro de uma parede (cabana,
+   *   rochas da caverna, pilares...). A câmera se aproxima para não atravessá-la.
+   */
+  update(
+    dt: number,
+    focus: THREE.Vector3,
+    getHeight: (x: number, z: number) => number,
+    isBlocked?: (x: number, y: number, z: number) => boolean,
+  ): void {
     // Alvo: um pouco acima da cabeça do jogador.
     this.tmp.set(focus.x, focus.y + 1.55, focus.z);
     if (!this.initialized) {
@@ -72,7 +93,7 @@ export class CameraController {
       const px = this.target.x + dirX * d;
       const py = this.target.y + dirY * d;
       const pz = this.target.z + dirZ * d;
-      if (py < getHeight(px, pz) + 0.45) {
+      if (py < getHeight(px, pz) + 0.45 || isBlocked?.(px, py, pz)) {
         dist = Math.max(0.8, d - 0.4);
         break;
       }
@@ -86,6 +107,17 @@ export class CameraController {
 
     this.camera.position.set(camX, camY, camZ);
     this.camera.lookAt(this.target);
+
+    // Tremor: deslocamento suave e pseudoaleatório proporcional ao trauma².
+    if (this.trauma > 0) {
+      this.shakeTime += dt;
+      const k = this.trauma * this.trauma;
+      const t = this.shakeTime * 28;
+      this.camera.position.x += Math.sin(t * 1.1) * 0.22 * k;
+      this.camera.position.y += Math.sin(t * 1.7 + 1) * 0.18 * k;
+      this.camera.rotation.z += Math.sin(t * 1.3 + 2) * 0.03 * k;
+      this.trauma = Math.max(0, this.trauma - dt * 1.4);
+    }
   }
 
   /** Câmera cinematográfica do menu: gira devagar em volta de um ponto. */

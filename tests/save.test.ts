@@ -25,12 +25,17 @@ function sample(): SaveData {
     version: SAVE_VERSION,
     savedAt: 1000,
     playTime: 321,
-    player: { x: 1, y: 2, z: 3, yaw: 0.5, energy: 80, torch: true, buffTime: 0 },
+    player: { x: 1, y: 2, z: 3, yaw: 0.5, energy: 80, torch: true, buffTime: 0, hunger: 64 },
     inventory: { madeira: 12, machado: 1 },
+    durability: { machado: 40 },
     progression: { xp: 160 },
     quests: { active: ['q_recursos'], completed: ['q_madeira'], progress: { q_recursos: [1, 2] }, tracked: null },
-    structures: [{ id: 'cabana_1', type: 'cabana', x: 30, z: 60, rot: 0 }],
-    world: { time: 13.5, day: 2, flags: ['bau_praia'], regions: ['praia'], explored: '', nodes: { arvore_1: { r: 0, t: 500 } } },
+    structures: [
+      { id: 'cabana_1', type: 'cabana', x: 30, z: 60, rot: 0 },
+      { id: 'bau_1', type: 'bau', x: 34, z: 60, rot: 0, data: { madeira: 5 } },
+      { id: 'parede_1', type: 'parede', x: 31, z: 64, rot: 0, y: 6.2 },
+    ],
+    world: { time: 13.5, day: 2, flags: ['bau_praia'], regions: ['praia'], explored: '', exploredAurora: '', nodes: { arvore_1: { r: 0, t: 500 } } },
     stats: { gathered: 20, crafted: 2, built: 1 },
   };
 }
@@ -59,12 +64,15 @@ describe('Salvamento', () => {
     expect(validateSave(null)).toBeNull();
   });
 
-  it('migra salvamentos antigos (versão 0)', () => {
+  it('migra salvamentos antigos (versão 0 e 1)', () => {
     const old = { ...sample(), version: 0 } as Record<string, unknown>;
     delete old.stats;
+    delete old.durability;
     const data = validateSave(old);
     expect(data?.version).toBe(SAVE_VERSION);
     expect(data?.stats).toEqual({ gathered: 0, crafted: 0, built: 0 });
+    expect(data?.player.hunger).toBe(100);
+    expect(data?.durability).toEqual({});
   });
 
   it('mapa explorado sobrevive à conversão em texto', () => {

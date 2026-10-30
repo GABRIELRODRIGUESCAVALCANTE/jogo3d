@@ -14,7 +14,13 @@ export type ItemId =
   | 'corda'
   | 'machado'
   | 'picareta'
-  | 'tocha';
+  | 'tocha'
+  | 'vara_de_pesca'
+  | 'peixe'
+  | 'peixe_assado'
+  | 'semente'
+  | 'batata_doce'
+  | 'batata_assada';
 
 export type ItemCategory = 'recurso' | 'material' | 'ferramenta' | 'comida' | 'especial';
 
@@ -25,10 +31,15 @@ export interface ItemDef {
   category: ItemCategory;
   /** Nome do ícone em `src/ui/icons.ts`. */
   icon: string;
-  /** Ferramentas são permanentes: basta ter uma. */
+  /** Ferramentas: o jogador tem no máximo uma de cada. */
   tool?: boolean;
-  /** Itens comestíveis restauram energia. */
-  food?: { energy: number; buffSeconds?: number };
+  /**
+   * Durabilidade da ferramenta: quantos usos ela aguenta (a tocha, quantos
+   * segundos fica acesa). Ao chegar a zero, ela quebra.
+   */
+  durability?: number;
+  /** Comida: restaura energia e mata a fome (saciedade). */
+  food?: { energy: number; hunger: number; buffSeconds?: number };
 }
 
 /** Conjunto de itens com quantidades (custos, recompensas...). */
@@ -62,7 +73,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     description: 'Fruta tropical suculenta. Restaura um pouco de energia.',
     category: 'comida',
     icon: 'fruta',
-    food: { energy: 30 },
+    food: { energy: 30, hunger: 18 },
   },
   fruta_assada: {
     id: 'fruta_assada',
@@ -70,7 +81,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     description: 'Assada na fogueira. Restaura muita energia e deixa você "Bem alimentado".',
     category: 'comida',
     icon: 'fruta_assada',
-    food: { energy: 70, buffSeconds: 120 },
+    food: { energy: 70, hunger: 40, buffSeconds: 120 },
   },
   cristal: {
     id: 'cristal',
@@ -96,26 +107,77 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   machado: {
     id: 'machado',
     name: 'Machado de Pedra',
-    description: 'Corta árvores mais rápido: o dobro de madeira por golpe.',
+    description: 'Corta árvores mais rápido: o dobro de madeira por golpe. Desgasta com o uso.',
     category: 'ferramenta',
     icon: 'machado',
     tool: true,
+    durability: 80,
   },
   picareta: {
     id: 'picareta',
     name: 'Picareta de Pedra',
-    description: 'Quebra rochas com eficiência e permite minerar cristais.',
+    description: 'Quebra rochas com eficiência e permite minerar cristais. Desgasta com o uso.',
     category: 'ferramenta',
     icon: 'picareta',
     tool: true,
+    durability: 80,
   },
   tocha: {
     id: 'tocha',
     name: 'Tocha',
-    description: 'Ilumina o caminho à noite e nas cavernas. Acenda com a tecla T.',
+    description: 'Ilumina o caminho à noite e nas cavernas. Acenda com a tecla T. Queima enquanto acesa.',
     category: 'ferramenta',
     icon: 'tocha',
     tool: true,
+    durability: 420,
+  },
+  vara_de_pesca: {
+    id: 'vara_de_pesca',
+    name: 'Vara de Pesca',
+    description: 'Fique na beira da água perto de um cardume e interaja para pescar.',
+    category: 'ferramenta',
+    icon: 'vara_de_pesca',
+    tool: true,
+    durability: 40,
+  },
+  peixe: {
+    id: 'peixe',
+    name: 'Peixe',
+    description: 'Peixe fresco. Melhor ainda se assado na fogueira.',
+    category: 'comida',
+    icon: 'peixe',
+    food: { energy: 15, hunger: 15 },
+  },
+  peixe_assado: {
+    id: 'peixe_assado',
+    name: 'Peixe Assado',
+    description: 'Uma refeição de verdade: mata a fome e deixa você "Bem alimentado".',
+    category: 'comida',
+    icon: 'peixe_assado',
+    food: { energy: 60, hunger: 55, buffSeconds: 150 },
+  },
+  semente: {
+    id: 'semente',
+    name: 'Semente',
+    description: 'Encontrada no capim alto. Plante num canteiro para colher batatas-doces.',
+    category: 'recurso',
+    icon: 'semente',
+  },
+  batata_doce: {
+    id: 'batata_doce',
+    name: 'Batata-doce',
+    description: 'Colhida na horta. Crua mata pouco a fome; assada é deliciosa.',
+    category: 'comida',
+    icon: 'batata_doce',
+    food: { energy: 10, hunger: 15 },
+  },
+  batata_assada: {
+    id: 'batata_assada',
+    name: 'Batata Assada',
+    description: 'Assada na fogueira: muito nutritiva.',
+    category: 'comida',
+    icon: 'batata_assada',
+    food: { energy: 45, hunger: 45 },
   },
 };
 
@@ -129,9 +191,15 @@ export const ITEM_ORDER: ItemId[] = [
   'corda',
   'fruta_assada',
   'reliquia',
+  'peixe',
+  'peixe_assado',
+  'semente',
+  'batata_doce',
+  'batata_assada',
   'machado',
   'picareta',
   'tocha',
+  'vara_de_pesca',
 ];
 
 /** Recursos sempre visíveis na barra inferior do HUD. */

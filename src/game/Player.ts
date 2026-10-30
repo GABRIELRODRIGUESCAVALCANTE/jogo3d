@@ -5,7 +5,14 @@ import * as THREE from 'three';
 import { clamp, damp, dampAngle } from '../core/math';
 import type { CollisionWorld } from './Collision';
 import { createCharacter, type CharacterRig, type HeldTool } from './models/Character';
+import { Animator, type ModelInstance } from './models/ModelLibrary';
 import { WATER_LEVEL, WORLD_LIMIT_RADIUS } from './world/layout';
+
+/** Gestos do personagem (comemorações). */
+export type Emote = 'acenar' | 'comemorar' | 'positivo';
+
+/** Nome da animação do modelo glTF (robô) para cada gesto. */
+const AVATAR_EMOTES: Record<Emote, string> = { acenar: 'Wave', comemorar: 'Dance', positivo: 'ThumbsUp' };
 
 export interface PlayerInput {
   /** x = direita, y = frente (relativo à câmera). */
@@ -18,6 +25,8 @@ export interface PlayerInput {
 export interface PlayerEnvironment {
   getHeight: (x: number, z: number) => number;
   collision: CollisionWorld;
+  /** Mantém o jogador perto de alguma ilha. Retorna verdadeiro se precisou corrigir. */
+  clampToWorld?: (pos: THREE.Vector3) => boolean;
 }
 
 const WALK_SPEED = 5;
@@ -39,12 +48,16 @@ export class Player {
   grounded = true;
   swimming = false;
   energy = 100;
+  /** Saciedade: 100 = sem fome, 0 = faminto (a energia para de se recuperar). */
+  hunger = 100;
   maxEnergy = 100;
   /** Segundos restantes do bônus "Bem alimentado". */
   buffTime = 0;
   /** Velocidade horizontal atual (para animação e sons). */
   speed = 0;
   torchOn = false;
+  /** Pescando: segura a vara e não se move. */
+  fishing = false;
 
   readonly rig: CharacterRig;
 
@@ -66,6 +79,10 @@ export class Player {
   private wasSwimming = false;
   private airTime = 0;
   private idleTime = 0;
+  private emoteTime = 0;
+  private emoteType: Emote = 'acenar';
+  /** Modelo glTF opcional (ex.: robô) que substitui o explorador feito de caixas. */
+  private avatar: { root: THREE.Object3D; animator: Animator } | null = null;
 
   constructor() {
     this.rig = createCharacter();
@@ -88,6 +105,68 @@ export class Player {
   playAction(tool: HeldTool): void {
     this.actionTime = this.actionDuration;
     this.actionTool = tool;
+    this.emoteTime = 0;
+    this.avatar?.animator.playOnce('Punch', 0.08, 1.8);
+  }
+
+  /** Faz um gesto (acenar ao concluir missão, comemorar ao subir de nível...). */
+  emote(type: Emote): void {
+    this.emoteType = type;
+    this.emoteTime = type === 'comemorar' ? 2.2 : 1.4;
+    this.avatar?.animator.playOnce(AVATAR_EMOTES[type], 0.15, type === 'comemorar' ? 1.4 : 1.2);
+  }
+
+  /**
+   * Troca a aparência: um modelo glTF animado ou (null) o explorador
+   * feito de caixas. As ferramentas passam para a mão do modelo.
+   */
+  setAvatar(model: ModelInstance | null, nativeHeight = 1.8): void {
+    const rig = this.rig;
+    if (this.avatar) {
+      rig.root.remove(this.avatar.root);
+      this.avatar = null;
+    }
+    const hand = rig.tools.machado.parent!;
+    if (!model) {
+      rig.body.visible = true;
+      rig.leftLeg.visible = true;
+      rig.rightLeg.visible = true;
+      rig.rightArm.add(hand);
+      hand.position.set(0, -0.6, 0.05);
+      hand.rotation.set(0, 0, 0);
+      hand.scale.setScalar(1);
+      return;
+    }
+    // Ajusta o tamanho para ~1,8 m de altura. (A altura original vem de quem
+    // fornece o modelo: caixas de modelos com esqueleto não são confiáveis.)
+    const root = model.root;
+    root.scale.setScalar(1.8 / nativeHeight);
+    root.position.y = 0;
+    rig.root.add(root);
+    rig.body.visible = false;
+    rig.leftLeg.visible = false;
+    rig.rightLeg.visible = false;
+
+    // Ferramentas na mão direita do modelo (se houver um osso com esse nome).
+    let bone: THREE.Object3D | null = null;
+    root.traverse((o) => {
+      if (!bone && /^(Palm2\.R|Hand\.R|hand_r|mixamorig:RightHand)$/i.test(o.name)) bone = o;
+    });
+    if (bone) {
+      const b = bone as THREE.Object3D;
+      rig.root.updateMatrixWorld(true);
+      b.add(hand);
+      const ws = b.getWorldScale(new THREE.Vector3());
+      hand.position.set(0, 0, 0);
+      hand.rotation.set(-Math.PI / 2, 0, 0);
+      hand.scale.setScalar(1 / Math.max(0.0001, ws.x));
+    }
+    this.avatar = { root, animator: new Animator(root, model.clips) };
+    this.avatar.animator.play('Idle', 0);
+  }
+
+  get hasAvatar(): boolean {
+    return this.avatar !== null;
   }
 
   get isActing(): boolean {
@@ -95,8 +174,9 @@ export class Player {
   }
 
   /** Come algo: recupera energia. */
-  eat(energy: number, buffSeconds = 0): void {
+  eat(energy: number, buffSeconds = 0, hunger = 0): void {
     this.energy = Math.min(this.maxEnergy, this.energy + energy);
+    this.hunger = Math.min(100, this.hunger + hunger);
     if (buffSeconds > 0) this.buffTime = Math.max(this.buffTime, buffSeconds);
   }
 
@@ -119,6 +199,9 @@ export class Player {
     }
 
     // --- Energia e corrida ---
+    // A fome aumenta com o tempo (cerca de 25 minutos para esvaziar), mais rápido correndo ou nadando.
+    const effort = input.sprint && inputMag > 0.1 ? 2 : this.swimming ? 1.5 : 1;
+    this.hunger = Math.max(0, this.hunger - dt * 0.066 * effort);
     const buffed = this.buffTime > 0;
     if (this.buffTime > 0) this.buffTime = Math.max(0, this.buffTime - dt);
     const wantsRun = input.sprint && inputMag > 0.1 && !this.swimming && this.energy > 1;
@@ -127,7 +210,11 @@ export class Player {
       this.energyRegenDelay = 1;
     } else {
       this.energyRegenDelay -= dt;
-      if (this.energyRegenDelay <= 0) this.energy = Math.min(this.maxEnergy, this.energy + dt * (buffed ? 16 : 8));
+      // Com fome a energia volta devagar; faminto, não volta.
+      const hungerFactor = this.hunger <= 0 ? 0 : this.hunger < 25 ? 0.4 : 1;
+      if (this.energyRegenDelay <= 0) {
+        this.energy = Math.min(this.maxEnergy, this.energy + dt * (buffed ? 16 : 8) * hungerFactor);
+      }
     }
 
     // --- Água ---
@@ -181,12 +268,15 @@ export class Player {
     pos.z += this.velocity.z * dt;
     pos.y += this.velocity.y * dt;
 
-    // Limite do mundo: o oceano é grande demais para nadar.
-    const distCenter = Math.hypot(pos.x, pos.z);
-    if (distCenter > WORLD_LIMIT_RADIUS) {
-      pos.x *= WORLD_LIMIT_RADIUS / distCenter;
-      pos.z *= WORLD_LIMIT_RADIUS / distCenter;
-      this.onBoundary?.();
+    // Limite do mundo: o oceano é grande demais para nadar (só de barco).
+    if (env.clampToWorld?.(pos)) this.onBoundary?.();
+    else if (!env.clampToWorld) {
+      const distCenter = Math.hypot(pos.x, pos.z);
+      if (distCenter > WORLD_LIMIT_RADIUS) {
+        pos.x *= WORLD_LIMIT_RADIUS / distCenter;
+        pos.z *= WORLD_LIMIT_RADIUS / distCenter;
+        this.onBoundary?.();
+      }
     }
 
     // --- Colisões com obstáculos e chão ---
@@ -222,6 +312,38 @@ export class Player {
     }
 
     this.animate(dt, horizSpeed, groundH, waterDepth);
+  }
+
+  /**
+   * Sentado (no barco): o personagem acompanha o assento, sem física.
+   */
+  sit(seat: THREE.Vector3, yaw: number, dt: number): void {
+    this.position.copy(seat);
+    this.velocity.set(0, 0, 0);
+    this.yaw = yaw;
+    this.speed = 0;
+    this.grounded = true;
+    this.swimming = false;
+    const rig = this.rig;
+    rig.root.position.copy(seat);
+    rig.root.rotation.y = yaw;
+    rig.leftLeg.rotation.x = damp(rig.leftLeg.rotation.x, -1.4, 10, dt);
+    rig.rightLeg.rotation.x = damp(rig.rightLeg.rotation.x, -1.4, 10, dt);
+    rig.leftArm.rotation.x = damp(rig.leftArm.rotation.x, -0.9, 10, dt);
+    rig.rightArm.rotation.x = damp(rig.rightArm.rotation.x, -0.9, 10, dt);
+    rig.body.rotation.x = 0;
+    rig.body.position.y = -0.35;
+    if (this.avatar) {
+      this.avatar.animator.play('Idle', 0.3);
+      this.avatar.root.position.y = -0.3;
+      this.avatar.animator.update(dt);
+    }
+  }
+
+  /** Volta ao normal ao desembarcar. */
+  stand(): void {
+    this.rig.body.position.y = 0;
+    if (this.avatar) this.avatar.root.position.y = 0;
   }
 
   /** Olha para um ponto (usado ao interagir com algo). */
@@ -270,19 +392,54 @@ export class Player {
       rig.rightArm.rotation.z = 0;
       rig.leftArm.rotation.x = damp(rig.leftArm.rotation.x, -0.3, 10, dt);
     } else {
-      const torchHold = this.torchOn ? -0.9 : 0;
+      const torchHold = this.fishing ? -1.1 : this.torchOn ? -0.9 : 0;
       rig.leftArm.rotation.x = damp(rig.leftArm.rotation.x, this.swimming ? -2.6 + Math.sin(this.walkPhase * 2) : -swing * 0.9, 14, dt);
       rig.rightArm.rotation.x = damp(rig.rightArm.rotation.x, this.swimming ? -2.6 - Math.sin(this.walkPhase * 2) : torchHold || swing * 0.9, 14, dt);
       rig.leftArm.rotation.z = damp(rig.leftArm.rotation.z, this.grounded ? 0.08 : 0.5, 10, dt);
       rig.rightArm.rotation.z = damp(rig.rightArm.rotation.z, this.grounded ? -0.08 : -0.5, 10, dt);
     }
 
+    // Gestos do explorador (o robô usa as animações do próprio modelo).
+    if (this.emoteTime > 0) {
+      this.emoteTime -= dt;
+      const t = performance.now() / 1000;
+      if (this.actionTime <= 0 && !moving) {
+        if (this.emoteType === 'acenar') {
+          rig.rightArm.rotation.x = -2.7;
+          rig.rightArm.rotation.z = -0.4 + Math.sin(t * 14) * 0.35;
+        } else if (this.emoteType === 'comemorar') {
+          rig.rightArm.rotation.x = -2.9 + Math.sin(t * 10) * 0.2;
+          rig.leftArm.rotation.x = -2.9 - Math.sin(t * 10) * 0.2;
+          rig.body.position.y = Math.abs(Math.sin(t * 8)) * 0.18;
+        } else {
+          rig.head.rotation.x = Math.sin(t * 12) * 0.25;
+          rig.rightArm.rotation.x = -1.4;
+        }
+      }
+    }
+
     // Ferramenta visível: a do golpe atual, ou a tocha acesa.
-    const shown: HeldTool = this.actionTime > 0 ? this.actionTool : this.torchOn ? 'tocha' : 'none';
+    const shown: HeldTool = this.actionTime > 0 ? this.actionTool : this.fishing ? 'vara' : this.torchOn ? 'tocha' : 'none';
     for (const [name, obj] of Object.entries(rig.tools)) obj.visible = name === shown;
     if (shown === 'tocha') {
       const flicker = 1 + Math.sin(performance.now() * 0.025) * 0.12 + Math.sin(performance.now() * 0.041) * 0.08;
       rig.flame.scale.set(flicker, 1.6 * flicker, flicker);
     }
+
+    if (this.avatar) this.updateAvatar(dt, speed, moving, run);
+  }
+
+  /** Escolhe a animação do modelo glTF conforme o movimento. */
+  private updateAvatar(dt: number, speed: number, moving: boolean, run: boolean): void {
+    const anim = this.avatar!.animator;
+    if (!anim.busy) {
+      if (!this.grounded && !this.swimming) anim.play('Jump', 0.15);
+      else if (run) anim.play('Running', 0.2, Math.min(1.6, speed / 7));
+      else if (moving) anim.play('Walking', 0.2, Math.max(0.6, Math.min(1.8, speed / 3.2)));
+      else anim.play('Idle', 0.3);
+    }
+    // Nadando: o corpo inclina para frente.
+    this.avatar!.root.rotation.x = this.swimming ? 0.9 : 0;
+    anim.update(dt);
   }
 }

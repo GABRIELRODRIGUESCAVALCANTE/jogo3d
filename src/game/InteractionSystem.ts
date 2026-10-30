@@ -26,6 +26,8 @@ export interface Interactable {
   position: THREE.Vector3;
   /** Distância extra (objetos grandes podem ser alcançados de mais longe). */
   radius: number;
+  /** Penalidade na escolha (maior = perde para outros objetos próximos). */
+  priority?: number;
   getAction(ctx: InteractionContext): InteractAction | null;
   interact(ctx: InteractionContext): void;
 }
@@ -112,7 +114,7 @@ export class InteractionSystem {
       const action = item.getAction(ctx);
       if (!action) continue;
       const facing = dist > 0.01 ? (dx * fx + dz * fz) / dist : 1; // 1 = bem na frente
-      const score = dist / reach + (1 - facing) * 0.6 + (action.enabled ? 0 : 0.5);
+      const score = dist / reach + (1 - facing) * 0.6 + (action.enabled ? 0 : 0.5) + (item.priority ?? 0);
       if (score < bestScore) {
         bestScore = score;
         best = item;

@@ -7,15 +7,16 @@ import type { Game } from '../game/Game';
 import { HUD_RESOURCES, ITEMS } from '../game/data/items';
 import { STRUCTURES } from '../game/data/structures';
 import { $, escapeHtml, html } from './dom';
+import { keyLabel, type BindableAction, type KeyBindings } from '../core/KeyBindings';
 import { icon } from './icons';
 import type { PanelId } from './UIManager';
 
-const MENU_BUTTONS: Array<{ panel: PanelId; icon: string; label: string; key: string }> = [
-  { panel: 'inventario', icon: 'mochila', label: 'Inventário', key: 'I' },
-  { panel: 'fabricacao', icon: 'martelo', label: 'Fabricar', key: 'C' },
-  { panel: 'construcao', icon: 'construir', label: 'Construir', key: 'B' },
-  { panel: 'mapa', icon: 'mapa', label: 'Mapa', key: 'M' },
-  { panel: 'missoes', icon: 'missao', label: 'Missões', key: 'J' },
+const MENU_BUTTONS: Array<{ panel: PanelId; icon: string; label: string; key: string; action?: BindableAction }> = [
+  { panel: 'inventario', icon: 'mochila', label: 'Inventário', key: 'I', action: 'inventario' },
+  { panel: 'fabricacao', icon: 'martelo', label: 'Fabricar', key: 'C', action: 'fabricar' },
+  { panel: 'construcao', icon: 'construir', label: 'Construir', key: 'B', action: 'construir' },
+  { panel: 'mapa', icon: 'mapa', label: 'Mapa', key: 'M', action: 'mapa' },
+  { panel: 'missoes', icon: 'missao', label: 'Missões', key: 'J', action: 'missoes' },
   { panel: 'pausa', icon: 'pausa', label: 'Pausa', key: 'Esc' },
 ];
 
@@ -26,6 +27,8 @@ export class HUD {
   private readonly xpLabel: HTMLElement;
   private readonly energyFill: HTMLElement;
   private readonly energyLabel: HTMLElement;
+  private readonly hungerFill: HTMLElement;
+  private readonly hungerLabel: HTMLElement;
   private readonly buffEl: HTMLElement;
   private readonly clockEl: HTMLElement;
   private readonly clockIcon: HTMLElement;
@@ -45,6 +48,8 @@ export class HUD {
   private resourcesDirty = true;
   private lastPrompt = '';
   private lastNight: boolean | null = null;
+  private interactKey = 'E';
+  private rotateKey = 'R';
 
   constructor(
     root: HTMLElement,
@@ -64,6 +69,7 @@ export class HUD {
           <div class="bars">
             <div class="bar bar-xp"><div class="fill"></div><span class="bar-label">XP</span></div>
             <div class="bar bar-energy"><div class="fill"></div><span class="bar-label">Energia</span></div>
+            <div class="bar bar-hunger"><div class="fill"></div><span class="bar-label">Saciedade</span></div>
             <div class="buff hidden">${icon('fruta_assada')}<span></span></div>
           </div>
         </div>
@@ -90,6 +96,8 @@ export class HUD {
     this.xpLabel = $(this.el, '.bar-xp .bar-label');
     this.energyFill = $(this.el, '.bar-energy .fill');
     this.energyLabel = $(this.el, '.bar-energy .bar-label');
+    this.hungerFill = $(this.el, '.bar-hunger .fill');
+    this.hungerLabel = $(this.el, '.bar-hunger .bar-label');
     this.buffEl = $(this.el, '.buff');
     this.clockEl = $(this.el, '.clock-text');
     this.clockIcon = $(this.el, '.clock-icon');
@@ -111,6 +119,20 @@ export class HUD {
     });
     $(this.el, '.minimap-wrap').addEventListener('click', () => onMenu('mapa'));
     this.trackerEl.addEventListener('click', () => onMenu('missoes'));
+  }
+
+  /** Atualiza as letras das teclas nos botões (o jogador pode trocar as teclas). */
+  refreshKeys(bindings: KeyBindings): void {
+    this.interactKey = keyLabel(bindings.primary('interagir'));
+    this.rotateKey = keyLabel(bindings.primary('girar'));
+    this.lastPrompt = '';
+    for (const b of MENU_BUTTONS) {
+      if (!b.action) continue;
+      const btn = this.el.querySelector<HTMLElement>(`.hud-btn[data-panel="${b.panel}"]`);
+      const label = keyLabel(bindings.primary(b.action));
+      btn?.querySelector('kbd')?.replaceChildren(label);
+      btn?.setAttribute('title', `${b.label} (${label})`);
+    }
   }
 
   setVisible(visible: boolean): void {
@@ -150,6 +172,9 @@ export class HUD {
     const p = g.player;
     this.energyFill.style.transform = `scaleX(${p.energy / p.maxEnergy})`;
     this.energyLabel.textContent = `Energia ${Math.round(p.energy)}`;
+    this.hungerFill.style.transform = `scaleX(${p.hunger / 100})`;
+    this.hungerLabel.textContent = p.hunger <= 0 ? 'Faminto!' : `Saciedade ${Math.round(p.hunger)}`;
+    this.hungerFill.parentElement!.classList.toggle('low', p.hunger < 25);
     this.energyFill.parentElement!.classList.toggle('low', p.energy < 20);
 
     // Atualizações mais lentas (4x por segundo).
@@ -192,7 +217,7 @@ export class HUD {
     this.minimapTimer -= dt;
     if (this.minimapTimer <= 0) {
       this.minimapTimer = 0.1;
-      g.mapRenderer.drawMinimap(this.minimap, g.worldState, g.mapView());
+      g.currentMap.drawMinimap(this.minimap, g.worldState, g.mapView());
     }
   }
 
@@ -256,7 +281,7 @@ export class HUD {
       this.buildEl.classList.remove('hidden');
       const keys = touch
         ? ''
-        : '<span class="keys"><kbd>R</kbd> girar · <kbd>E</kbd>/clique construir · <kbd>Esc</kbd> cancelar</span>';
+        : `<span class="keys"><kbd>${escapeHtml(this.rotateKey)}</kbd> girar · <kbd>${escapeHtml(this.interactKey)}</kbd>/clique construir · <kbd>Esc</kbd> cancelar</span>`;
       this.buildEl.innerHTML = `${icon(def.icon)}<b>${escapeHtml(def.name)}</b>${keys}`;
       text = check.ok ? 'Local válido' : (check.reason ?? 'Local inválido');
       cls = check.ok ? 'ok' : 'blocked';
@@ -269,7 +294,14 @@ export class HUD {
     } else {
       this.buildEl.classList.add('hidden');
       const action = g.interaction.currentAction;
-      if (action && g.isPlaying) {
+      if (g.boatCtl.active && g.isPlaying) {
+        text = touch ? 'Joystick conduz o barco' : '[E] Desembarcar · frente/trás: velocidade · lados: direção';
+        cls = 'muted';
+      } else if (g.fishing.active && g.isPlaying) {
+        const bite = g.fishing.state === 'bite';
+        text = bite && !touch ? '[E] Puxe agora!' : g.fishing.prompt;
+        cls = bite ? 'ok' : 'muted';
+      } else if (action && g.isPlaying) {
         if (action.enabled) {
           text = touch ? action.label : `[E] ${action.label}`;
         } else {
@@ -281,8 +313,9 @@ export class HUD {
     const key = `${text}|${cls}`;
     if (key === this.lastPrompt) return;
     this.lastPrompt = key;
-    this.promptEl.classList.toggle('hidden', !text || (touch && g.building.mode === 'none'));
-    this.promptEl.className = `prompt ${cls} ${!text || (touch && g.building.mode === 'none') ? 'hidden' : ''}`;
-    this.promptEl.innerHTML = text.startsWith('[E] ') ? `<kbd>E</kbd>${escapeHtml(text.slice(4))}` : escapeHtml(text);
+    const hideOnTouch = touch && g.building.mode === 'none' && !g.fishing.active && !g.boatCtl.active;
+    this.promptEl.className = `prompt ${cls} ${!text || hideOnTouch ? 'hidden' : ''}`;
+    // "[E] " marca o lugar da tecla de interagir (que o jogador pode ter trocado).
+    this.promptEl.innerHTML = text.startsWith('[E] ') ? `<kbd>${escapeHtml(this.interactKey)}</kbd>${escapeHtml(text.slice(4))}` : escapeHtml(text);
   }
 }

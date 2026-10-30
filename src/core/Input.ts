@@ -9,12 +9,7 @@
 /** Ações que podem vir tanto do teclado quanto dos botões de toque. */
 export type InputAction = 'jump' | 'interact' | 'rotate' | 'torch';
 
-const MOVE_KEYS = {
-  forward: ['KeyW', 'ArrowUp'],
-  back: ['KeyS', 'ArrowDown'],
-  left: ['KeyA', 'ArrowLeft'],
-  right: ['KeyD', 'ArrowRight'],
-};
+import { KeyBindings, type BindableAction } from './KeyBindings';
 
 /** Teclas que não devem rolar a página nem acionar atalhos do navegador. */
 const PREVENT_DEFAULT = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
@@ -24,6 +19,9 @@ export class Input {
   enabled = true;
   /** Verdadeiro enquanto o mouse está "capturado" pelo jogo (Pointer Lock). */
   pointerLocked = false;
+
+  /** Teclas configuráveis (Opções → Teclado). */
+  readonly bindings = new KeyBindings();
 
   /** Chamado para atalhos de interface (I, M, Esc...). */
   onKeyDown: ((code: string, event: KeyboardEvent) => void) | null = null;
@@ -107,10 +105,10 @@ export class Input {
     if (!this.enabled) return { x: 0, y: 0 };
     let x = 0;
     let y = 0;
-    if (MOVE_KEYS.forward.some((k) => this.keys.has(k))) y += 1;
-    if (MOVE_KEYS.back.some((k) => this.keys.has(k))) y -= 1;
-    if (MOVE_KEYS.right.some((k) => this.keys.has(k))) x += 1;
-    if (MOVE_KEYS.left.some((k) => this.keys.has(k))) x -= 1;
+    if (this.down('frente')) y += 1;
+    if (this.down('tras')) y -= 1;
+    if (this.down('direita')) x += 1;
+    if (this.down('esquerda')) x -= 1;
     x += this.touchMove.x;
     y += this.touchMove.y;
     const len = Math.hypot(x, y);
@@ -123,7 +121,7 @@ export class Input {
 
   isSprinting(): boolean {
     if (!this.enabled) return false;
-    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchRun;
+    return this.down('correr') || this.touchRun;
   }
 
   /** Verdadeiro apenas no quadro em que a ação foi acionada. */
@@ -132,13 +130,13 @@ export class Input {
     if (this.touchPressed.has(action)) return true;
     switch (action) {
       case 'jump':
-        return this.pressed.has('Space');
+        return this.justPressed('pular');
       case 'interact':
-        return this.pressed.has('KeyE') || this.mousePressed;
+        return this.justPressed('interagir') || this.mousePressed;
       case 'rotate':
-        return this.pressed.has('KeyR');
+        return this.justPressed('girar');
       case 'torch':
-        return this.pressed.has('KeyT');
+        return this.justPressed('tocha');
     }
   }
 
@@ -146,9 +144,19 @@ export class Input {
   actionHeld(action: InputAction): boolean {
     if (!this.enabled) return false;
     if (this.touchHeld.has(action)) return true;
-    if (action === 'interact') return this.keys.has('KeyE') || this.mouseHeld;
-    if (action === 'jump') return this.keys.has('Space');
+    if (action === 'interact') return this.down('interagir') || this.mouseHeld;
+    if (action === 'jump') return this.down('pular');
     return false;
+  }
+
+  /** Alguma tecla da ação está pressionada? */
+  private down(action: BindableAction): boolean {
+    return this.bindings.keys(action).some((k) => this.keys.has(k));
+  }
+
+  /** Alguma tecla da ação foi apertada neste quadro? */
+  private justPressed(action: BindableAction): boolean {
+    return this.bindings.keys(action).some((k) => this.pressed.has(k));
   }
 
   /** Descarta o movimento do mouse por alguns milissegundos. */

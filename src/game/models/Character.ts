@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { createFlatMaterial, merge, part } from './geometry';
 
-export type HeldTool = 'none' | 'machado' | 'picareta' | 'tocha';
+export type HeldTool = 'none' | 'machado' | 'picareta' | 'tocha' | 'vara';
 
 export interface CharacterRig {
   root: THREE.Group;
@@ -19,6 +19,8 @@ export interface CharacterRig {
   tools: Record<Exclude<HeldTool, 'none'>, THREE.Object3D>;
   /** Ponta da tocha (onde fica a luz). */
   torchTip: THREE.Object3D;
+  /** Ponta da vara de pesca (onde sai a linha). */
+  rodTip: THREE.Object3D;
   flame: THREE.Mesh;
 }
 
@@ -142,7 +144,21 @@ export function createCharacter(): CharacterRig {
   flame.scale.set(1, 1.6, 1);
   torch.add(flame);
 
-  for (const tool of [axe, pickaxe, torch]) {
+  // Vara de pesca: longa, apontando para frente e para cima.
+  const rod = new THREE.Group();
+  rod.add(
+    mesh(
+      merge([
+        part(new THREE.CylinderGeometry(0.018, 0.035, 1.9, 5), '#8b5a2b', { rot: [Math.PI / 2 - 0.5, 0, 0], pos: [0, 0.45, 0.85] }),
+        part(new THREE.CylinderGeometry(0.05, 0.05, 0.12, 8), '#c9a26b', { rot: [0, 0, Math.PI / 2], pos: [0, 0.02, 0.15] }),
+      ]),
+    ),
+  );
+  const rodTip = new THREE.Object3D();
+  rodTip.position.set(0, 0.9, 1.68);
+  rod.add(rodTip);
+
+  for (const tool of [axe, pickaxe, torch, rod]) {
     tool.visible = false;
     hand.add(tool);
   }
@@ -155,7 +171,8 @@ export function createCharacter(): CharacterRig {
     rightArm,
     leftLeg,
     rightLeg,
-    tools: { machado: axe, picareta: pickaxe, tocha: torch },
+    tools: { machado: axe, picareta: pickaxe, tocha: torch, vara: rod },
+    rodTip,
     torchTip,
     flame,
   };

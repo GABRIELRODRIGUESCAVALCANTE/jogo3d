@@ -32,7 +32,14 @@ O comando já usa `--host`, então o terminal também mostra um endereço de red
 | `npm run build`     | Verifica os tipos (TypeScript) e gera a versão de produção em `dist/` |
 | `npm run preview`   | Serve a pasta `dist/` localmente para testar a versão de produção |
 | `npm test`          | Roda os testes automáticos da lógica do jogo (Vitest)             |
+| `npm run test:e2e`  | Abre o jogo num navegador e joga sozinho (Playwright)             |
 | `npm run typecheck` | Só verifica os tipos                                              |
+
+Na primeira vez, para os testes de ponta a ponta, instale o navegador do Playwright:
+
+```bash
+npx playwright install chromium
+```
 
 ---
 
@@ -62,6 +69,7 @@ O comando já usa `--host`, então o terminal também mostra um endereço de red
 - Ícones no topo: inventário, fabricação, construção, mapa, missões e pausa.
 
 O tipo de controle é detectado automaticamente e pode ser trocado em **Opções → Tipo de controle**.
+As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Opções → Teclado**.
 
 ---
 
@@ -72,14 +80,28 @@ O tipo de controle é detectado automaticamente e pode ser trocado em **Opções
 - Câmera que segue o personagem, desvia do terreno e se aproxima dentro da caverna e da cabana.
 - Colisão com árvores, pedras, paredes e construções (dá para subir em pedras e pisos).
 - Coleta de **madeira, pedra, fibra, frutas e cristais**; os recursos renascem com o tempo.
+- **Fome (saciedade)**: diminui com o tempo; com fome a energia volta devagar, faminto ela não volta.
+- **Durabilidade das ferramentas** (machado, picareta, vara de pesca e a tocha, que queima enquanto acesa).
+- **Pesca** com minijogo (lançar, esperar a boia afundar e puxar na hora certa) perto dos cardumes.
+- **Horta**: sementes do capim alto, canteiro, crescimento em tempo de jogo e colheita de batatas-doces.
+- **Baú de armazenamento** para guardar itens.
+- **Construção modular** em grade de 2 m: piso, paredes (lisa, com porta, com janela) e telhado de palha.
+- **Barco a vela** (depois de acender o farol): construa na água rasa, embarque e navegue pelo mar.
+- **Ilha da Aurora** (capítulo 2): uma segunda ilha a nordeste, gerada **sob demanda** — o terreno é
+  montado aos poucos (um pedaço por quadro) quando você se aproxima. Tem floresta azulada, três
+  pilares de cristal e o Observatório dos Lumeni, que acende uma aurora no céu noturno.
+- Fauna: raposas animadas (glTF), caranguejos, gaivotas e peixes que saltam da água.
+- Personagem à escolha: Explorador ou Robô (modelo glTF com animações e gestos).
 - Inventário visual, comida que restaura energia e o bônus "Bem alimentado".
-- Fabricação: corda, machado, picareta, tocha e fruta assada (com estações: bancada e fogueira).
-- Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, cerca, caminho e lanterna.
-- 15 missões encadeadas com objetivos, recompensas e um final.
+- Fabricação: corda, machado, picareta, tocha, vara de pesca e comidas assadas (com estações: bancada e fogueira).
+- Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, baú, canteiro, peças modulares, cerca, caminho e lanterna.
+- 22 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 3 opcionais, com recompensas e finais.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
 - Ciclo de dia e noite (sol, lua, estrelas), luzes de fogueiras, lanternas e tocha; dormir na cabana pula a noite.
 - Salvamento automático (a cada minuto, ao concluir missões, ao construir e ao sair da aba), salvamento manual, carregamento e opção de **apagar o salvamento com confirmação**.
+- **Três espaços de salvamento**, com **exportar** (baixa um arquivo `.json`) e **importar** — para guardar uma cópia ou continuar em outro aparelho.
+- **Acessibilidade**: teclas configuráveis (Opções → Teclado), tamanho da interface, cores para daltonismo (azul/laranja) e "reduzir movimento" (sem tremor de câmera e com menos animações).
 - Áudio sintetizado (efeitos, ondas, vento, pássaros, grilos e música suave), com volumes separados.
 - Opções de qualidade gráfica (Baixa/Média/Alta), sensibilidade, inversão do eixo e duração do dia.
 - Tratamento de redimensionamento, perda do contexto WebGL, navegador sem WebGL 2 e falhas de carregamento.
@@ -150,12 +172,15 @@ tests/                     Testes automáticos (Vitest)
 Os sistemas conversam por **eventos** (`src/game/events.ts`), então um módulo novo pode reagir,
 por exemplo, a `resource:gathered` sem alterar o inventário.
 
-### Expansão do mundo
+### Expansão do mundo (várias ilhas)
 
-O terreno é gerado por uma função determinística (mesma semente = mesma ilha) e montado em
-*chunks* (`Terrain.ts`), que já são escondidos quando ficam longe. Para crescer o mundo:
-aumente `WORLD_SIZE`/`TERRAIN_SEGMENTS` em `layout.ts`, adicione regiões e lugares, e — para mapas
-muito grandes — gere/carregue os chunks perto do jogador em vez de todos de uma vez.
+Cada ilha é uma `IslandShape` em `src/game/world/islands.ts`: centro, tamanho, resolução e a
+função de altura. O `TerrainSet` responde a altura do chão em qualquer ponto do mundo, perguntando
+à ilha certa. A ilha principal é montada no carregamento; a Ilha da Aurora só é criada quando o
+jogador chega a ~340 m dela, e a malha aparece um *chunk* por quadro (`Terrain.buildNextChunk`).
+Para adicionar uma terceira ilha: crie outra `IslandShape`, inclua em `ISLAND_SHAPES`, adicione
+uma grade de exploração em `WorldState`, uma faixa densa na água (`Water.ts`) e o conteúdo
+(recursos, marcos e missões), seguindo o exemplo da Aurora.
 
 ---
 
@@ -174,6 +199,22 @@ Se o navegador bloquear o armazenamento (modo privado, por exemplo), o jogo avis
 funcionando com salvamento apenas em memória.
 
 ---
+
+## Automação no GitHub (CI e publicação)
+
+- **`.github/workflows/ci.yml`**: a cada push, verifica os tipos, roda os testes de lógica,
+  gera o build e joga o jogo num navegador (testes de ponta a ponta, incluindo a história
+  completa, controles de toque e o aviso de navegador sem WebGL).
+- **`.github/workflows/deploy.yml`**: a cada push na branch `main`, publica o jogo no
+  **GitHub Pages**. Configuração única: no GitHub, abra *Settings → Pages* e, em *Source*,
+  escolha **GitHub Actions**. O endereço fica `https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/`.
+
+## Funciona offline e pode ser instalado (PWA)
+
+Na versão publicada, um *service worker* (gerado no build pelo `vite.config.ts`, a partir de
+`src/pwa/service-worker.template.js`) guarda os arquivos do jogo. Depois da primeira visita,
+o jogo abre mesmo sem internet. No celular, use "Adicionar à tela inicial" / "Instalar app"
+para jogar em tela cheia, como um aplicativo.
 
 ## Publicar na internet (site estático com HTTPS)
 
@@ -195,13 +236,18 @@ Depois é só compartilhar o link. No celular, o navegador permite "Adicionar à
 
 ---
 
-## Gerar um APK Android com Capacitor (futuro)
+## Gerar um APK Android
 
-O projeto já está preparado (`base: './'` e `capacitor.config.json`). Passo a passo:
+### Pelo GitHub (sem instalar nada)
 
-```bash
-npm install @capacitor/core @capacitor/cli @capacitor/android
-```
+O workflow `.github/workflows/android.yml` gera um APK de teste. No GitHub, abra
+**Actions → APK Android → Run workflow** (ou crie uma tag como `v1.0.0`). Ao terminar,
+baixe o arquivo em **Artifacts → alem-do-horizonte-apk**, copie para o celular e instale
+(o Android pede para permitir "fontes desconhecidas"). O APK já vem na horizontal e com o ícone do jogo.
+
+### No seu computador (Capacitor)
+
+O Capacitor já está nas dependências do projeto. Requer Android Studio e JDK 21:
 
 ```bash
 npm run build
@@ -230,12 +276,22 @@ O último comando abre o Android Studio, onde você gera o APK/AAB
 - Árvores, pedras, capim e decorações usam `InstancedMesh` (centenas de objetos em uma chamada de desenho).
 - Número fixo de luzes pontuais (sem recompilar shaders), terreno em chunks com distância de visão.
 - Qualidade **Baixa** desliga sombras, reduz a resolução e a vegetação — recomendada para celulares simples.
-- O jogo sugere reduzir a qualidade se detectar FPS baixo por vários segundos.
+- Se o FPS ficar baixo por vários segundos, o jogo reduz a qualidade sozinho
+  (pode ser desligado em **Opções → Ajustar qualidade automaticamente**).
+- Em **Opções → Gráficos** há um diagnóstico com FPS, resolução, chamadas de desenho,
+  triângulos e o nome da placa de vídeo — útil para testar em celulares reais.
 - Ative **Opções → Mostrar FPS** para acompanhar o desempenho.
 
 ## Créditos e licença
 
-Código, modelos low-poly, ícones e sons foram criados por código para este projeto.
+Código, modelos low-poly do mundo, ícones e música foram criados por código para este projeto.
+Recursos de terceiros (lista completa em `public/assets/CREDITOS.txt`):
+
+- **Robô** (`robo.glb`): "RobotExpressive", de Tomás Laulhé (Quaternius) — CC0.
+- **Raposa** (`raposa.glb`): "Fox" do glTF-Sample-Assets (Khronos) — modelo de PixelMannen (CC0);
+  rigging/animação de tomkranis e conversão de @AsoboStudio e @scurest
+  ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
+- **Efeitos sonoros** gravados: [Kenney](https://kenney.nl) — CC0.
 Bibliotecas: [Three.js](https://threejs.org) (MIT), [Vite](https://vite.dev) (MIT),
 fontes [Fredoka](https://fonts.google.com/specimen/Fredoka) e
 [Nunito](https://fonts.google.com/specimen/Nunito) via Fontsource (SIL Open Font License).

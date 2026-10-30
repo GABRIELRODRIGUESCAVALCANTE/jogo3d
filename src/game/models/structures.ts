@@ -12,6 +12,12 @@ export interface StructureModel {
   roof?: THREE.Object3D;
   /** Chamas animadas (fogueira). */
   flames?: THREE.Object3D;
+  /** Tampa (baú). */
+  lid?: THREE.Object3D;
+  /** Planta que cresce (canteiro): o jogo ajusta a escala conforme o estágio. */
+  plant?: THREE.Object3D;
+  /** Batatas aparecendo quando a planta está pronta para colher. */
+  crop?: THREE.Object3D;
 }
 
 const WOOD = '#9a6a3f';
@@ -20,6 +26,8 @@ const WOOD_LIGHT = '#b98552';
 const STONE = '#9d978d';
 const ROOF = '#c9573c';
 const ROOF_DARK = '#a8442f';
+/** Altura das paredes modulares (igual a WALL_HEIGHT em data/structures.ts). */
+const WALL_H = 2.6;
 
 let sharedMaterial: THREE.MeshLambertMaterial | null = null;
 function material(): THREE.MeshLambertMaterial {
@@ -48,7 +56,177 @@ export function createStructureModel(type: StructureId): StructureModel {
       return createPath();
     case 'lanterna':
       return createLantern();
+    case 'bau':
+      return createChest();
+    case 'canteiro':
+      return createGardenBed();
+    case 'piso':
+      return createFloor();
+    case 'parede':
+      return createWall('lisa');
+    case 'parede_porta':
+      return createWall('porta');
+    case 'parede_janela':
+      return createWall('janela');
+    case 'telhado':
+      return createRoofTile();
+    case 'barco':
+      return createBoat();
   }
+}
+
+/** Barco a vela: a proa aponta para +Z. A origem fica na linha d'água. */
+function createBoat(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [];
+  parts.push(part(new THREE.BoxGeometry(1.4, 0.35, 3.6), WOOD_DARK, { pos: [0, -0.15, -0.1] }));
+  for (const side of [-1, 1]) {
+    parts.push(part(new THREE.BoxGeometry(0.12, 0.6, 3.6), WOOD, { pos: [side * 0.75, 0.15, -0.1], rot: [0, 0, side * 0.25] }));
+    parts.push(part(new THREE.BoxGeometry(0.12, 0.55, 1.2), WOOD, { pos: [side * 0.4, 0.15, 2.1], rot: [0, -side * 0.6, side * 0.25] }));
+  }
+  parts.push(part(new THREE.BoxGeometry(1.5, 0.6, 0.12), WOOD, { pos: [0, 0.15, -1.9] }));
+  parts.push(part(new THREE.BoxGeometry(1.3, 0.08, 0.4), WOOD_LIGHT, { pos: [0, 0.2, -1.1] }));
+  parts.push(part(new THREE.CylinderGeometry(0.07, 0.09, 4.2, 6), WOOD_DARK, { pos: [0, 2.2, 0.5] }));
+  parts.push(part(new THREE.CylinderGeometry(0.04, 0.04, 2, 5), WOOD_DARK, { rot: [Math.PI / 2, 0, 0], pos: [0, 1.0, -0.4] }));
+  root.add(mesh(merge(parts)));
+  // Vela triangular (dos dois lados).
+  const sailShape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0, 3.4), new THREE.Vector2(-1.9, 0)]);
+  const sail = new THREE.Mesh(new THREE.ShapeGeometry(sailShape), new THREE.MeshLambertMaterial({ color: '#f4ead2', side: THREE.DoubleSide }));
+  sail.rotation.y = Math.PI / 2;
+  sail.position.set(0, 1.05, 0.48);
+  sail.castShadow = true;
+  root.add(sail);
+  return { root };
+}
+
+function createChest(): StructureModel {
+  const root = new THREE.Group();
+  const gold = '#d9b24c';
+  root.add(
+    mesh(
+      merge([
+        part(new THREE.BoxGeometry(1.2, 0.6, 0.75), WOOD, { pos: [0, 0.3, 0] }),
+        part(new THREE.BoxGeometry(1.24, 0.08, 0.79), gold, { pos: [0, 0.12, 0] }),
+        part(new THREE.BoxGeometry(0.08, 0.62, 0.79), gold, { pos: [-0.45, 0.31, 0] }),
+        part(new THREE.BoxGeometry(0.08, 0.62, 0.79), gold, { pos: [0.45, 0.31, 0] }),
+      ]),
+    ),
+  );
+  const lid = new THREE.Group();
+  lid.position.set(0, 0.6, -0.37);
+  lid.add(
+    mesh(
+      merge([
+        part(new THREE.BoxGeometry(1.22, 0.26, 0.77), WOOD_LIGHT, { pos: [0, 0.13, 0.385] }),
+        part(new THREE.BoxGeometry(0.18, 0.2, 0.06), gold, { pos: [0, 0.02, 0.78] }),
+      ]),
+    ),
+  );
+  root.add(lid);
+  return { root, lid };
+}
+
+function createGardenBed(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [];
+  for (const [x, z, w, d] of [
+    [0, -0.95, 2, 0.12],
+    [0, 0.95, 2, 0.12],
+    [-0.95, 0, 0.12, 1.8],
+    [0.95, 0, 0.12, 1.8],
+  ]) {
+    parts.push(part(new THREE.BoxGeometry(w, 0.3, d), WOOD_DARK, { pos: [x, 0.1, z] }));
+  }
+  parts.push(part(new THREE.BoxGeometry(1.8, 0.28, 1.8), '#6b4a2e', { pos: [0, 0.05, 0], variation: 0.1 }));
+  for (let i = -1; i <= 1; i++) parts.push(part(new THREE.BoxGeometry(1.7, 0.06, 0.18), '#5a3c24', { pos: [0, 0.2, i * 0.55] }));
+  root.add(mesh(merge(parts)));
+
+  // Planta: três mudas em fileira (crescem com o tempo).
+  const leaves: THREE.BufferGeometry[] = [];
+  for (let i = -1; i <= 1; i++) {
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2;
+      const leaf = new THREE.ConeGeometry(0.12, 0.6, 4);
+      leaf.translate(0, 0.3, 0);
+      leaf.rotateZ(0.5);
+      leaf.rotateY(a);
+      leaf.translate(0, 0, i * 0.55);
+      leaves.push(paintLeaf(leaf, k));
+    }
+  }
+  const plant = mesh(merge(leaves));
+  plant.position.y = 0.2;
+  root.add(plant);
+  const tubers: THREE.BufferGeometry[] = [];
+  for (let i = -1; i <= 1; i++) {
+    tubers.push(part(new THREE.IcosahedronGeometry(0.12, 0), '#c8573a', { pos: [0.18, 0.24, i * 0.55 + 0.1], scale: [1.4, 0.8, 1] }));
+    tubers.push(part(new THREE.IcosahedronGeometry(0.1, 0), '#d8693f', { pos: [-0.16, 0.23, i * 0.55 - 0.08], scale: [1.4, 0.8, 1] }));
+  }
+  const crop = mesh(merge(tubers));
+  root.add(crop);
+  return { root, plant, crop };
+}
+
+function paintLeaf(geometry: THREE.BufferGeometry, seed: number): THREE.BufferGeometry {
+  return part(geometry, seed % 2 ? '#4caf50' : '#66c95a', { seed });
+}
+
+function createFloor(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [];
+  // Estrutura que desce até o chão (esconde desníveis) e tábuas por cima.
+  parts.push(part(new THREE.BoxGeometry(2, 1.4, 2), WOOD_DARK, { pos: [0, -0.62, 0] }));
+  for (let i = 0; i < 5; i++) {
+    parts.push(part(new THREE.BoxGeometry(2, 0.1, 0.38), i % 2 ? WOOD_LIGHT : '#c4925e', { pos: [0, 0.1, -0.8 + i * 0.4], seed: i }));
+  }
+  root.add(mesh(merge(parts)));
+  return { root };
+}
+
+/** Parede modular de 2 m (centrada na origem, ao longo do eixo X). */
+function createWall(kind: 'lisa' | 'porta' | 'janela'): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [];
+  const logs = 6;
+  const r = WALL_H / logs / 2;
+  for (let i = 0; i < logs; i++) {
+    const y = r + i * r * 2;
+    const color = i % 2 === 0 ? WOOD : WOOD_DARK;
+    const gapDoor = kind === 'porta' && i < 5;
+    const gapWindow = kind === 'janela' && (i === 2 || i === 3);
+    if (gapDoor || gapWindow) {
+      const gap = gapDoor ? 1.0 : 0.9;
+      const seg = (2.1 - gap) / 2;
+      for (const side of [-1, 1]) {
+        parts.push(part(new THREE.CylinderGeometry(r, r, seg, 6), color, { rot: [0, 0, Math.PI / 2], pos: [side * (gap / 2 + seg / 2), y, 0], seed: i }));
+      }
+    } else {
+      parts.push(part(new THREE.CylinderGeometry(r, r, 2.1, 6), color, { rot: [0, 0, Math.PI / 2], pos: [0, y, 0], seed: i }));
+    }
+  }
+  // Postes nas pontas (escondem as emendas) e viga de base que desce até o chão.
+  for (const side of [-1, 1]) parts.push(part(new THREE.BoxGeometry(0.22, WALL_H + 0.1, 0.32), WOOD_DARK, { pos: [side * 1, WALL_H / 2, 0] }));
+  parts.push(part(new THREE.BoxGeometry(2.1, 1.0, 0.3), STONE, { pos: [0, -0.5, 0], variation: 0.08 }));
+  if (kind === 'porta') parts.push(part(new THREE.BoxGeometry(1.2, 0.14, 0.32), WOOD_DARK, { pos: [0, 2.2, 0] }));
+  if (kind === 'janela') {
+    parts.push(part(new THREE.BoxGeometry(1.0, 0.08, 0.36), WOOD_LIGHT, { pos: [0, 0.86, 0] }));
+    parts.push(part(new THREE.BoxGeometry(0.06, 0.86, 0.06), WOOD_DARK, { pos: [0, 1.3, 0] }));
+  }
+  root.add(mesh(merge(parts)));
+  return { root };
+}
+
+function createRoofTile(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [];
+  parts.push(part(new THREE.BoxGeometry(2.3, 0.12, 2.3), WOOD_DARK, { pos: [0, 0.06, 0] }));
+  // Palha em camadas (com beiral).
+  for (let i = 0; i < 4; i++) {
+    parts.push(part(new THREE.BoxGeometry(2.4 - i * 0.25, 0.12, 2.4 - i * 0.25), i % 2 ? '#d9b45a' : '#c9a24a', { pos: [0, 0.16 + i * 0.1, 0], variation: 0.12, seed: i }));
+  }
+  const roof = mesh(merge(parts));
+  root.add(roof);
+  return { root, roof };
 }
 
 /** Cabana de toras: piso, paredes com porta e janelas, telhado e cama. */

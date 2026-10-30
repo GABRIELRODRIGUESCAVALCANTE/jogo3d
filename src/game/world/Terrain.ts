@@ -12,21 +12,46 @@
 import * as THREE from 'three';
 import { SimplexNoise2D } from '../../core/noise';
 import { clamp, createRandom, lerp, smoothstep } from '../../core/math';
-import {
-  FLATTEN_ZONES,
-  PLACES,
-  TERRAIN_SEGMENTS,
-  WATER_LEVEL,
-  WORLD_HALF,
-  WORLD_SEED,
-  WORLD_SIZE,
-  distanceToPaths,
-} from './layout';
+import { WATER_LEVEL, type FlattenZone } from './layout';
+import { MAIN_ISLAND } from './islands';
+
+/** Interface mínima de "altura do chão" usada por quase todos os sistemas. */
+export interface HeightField {
+  getHeight(x: number, z: number): number;
+  getSlope(x: number, z: number): number;
+}
+
+export type IslandId = 'principal' | 'aurora';
+
+/**
+ * Descrição de uma ilha: onde fica, tamanho, resolução e a função que dá a
+ * altura natural do terreno. Para criar uma ilha nova, basta outra IslandShape.
+ */
+export interface IslandShape {
+  id: IslandId;
+  name: string;
+  /** Centro da ilha no mundo. */
+  cx: number;
+  cz: number;
+  /** Lado do quadrado do terreno (metros) e número de células por lado. */
+  size: number;
+  segments: number;
+  seed: number;
+  /** Altura natural (coordenadas do mundo). */
+  raw: (x: number, z: number, noise: SimplexNoise2D) => number;
+  flatten: FlattenZone[];
+  /** Distância até a trilha mais próxima (para pintar o chão de terra). */
+  pathDistance?: (x: number, z: number) => number;
+  /** Cor especial de um ponto (ex.: chão de pedra da caverna). */
+  specialColor?: (x: number, z: number, out: THREE.Color) => boolean;
+  /** Tons de grama próprios (ilhas com outra vegetação). */
+  grass?: { light: string; mid: string; dark: string };
+}
 
 const CHUNKS_PER_SIDE = 4;
 
 // Paleta do terreno (cores no espaço sRGB, como em um editor de imagem).
-const COLORS = {
+export const COLORS = {
   seabed: new THREE.Color('#d9c48f'),
   sandWet: new THREE.Color('#e3cf95'),
   sand: new THREE.Color('#f2dfa7'),
@@ -40,54 +65,100 @@ const COLORS = {
   plaza: new THREE.Color('#b8b0a0'),
 };
 
-export class Terrain {
+export class Terrain implements HeightField {
   /** Alturas nos vértices da grade: (SEGMENTS + 1)². */
   readonly heights: Float32Array;
   readonly group = new THREE.Group();
   readonly material: THREE.MeshLambertMaterial;
-  private readonly n = TERRAIN_SEGMENTS;
-  private readonly cell = WORLD_SIZE / TERRAIN_SEGMENTS;
+  /** Verdadeiro depois que o mapa de alturas foi calculado. */
+  ready = false;
+  private readonly n: number;
+  private readonly cell: number;
+  private readonly half: number;
   private readonly noise: SimplexNoise2D;
+  private readonly grass: { light: THREE.Color; mid: THREE.Color; dark: THREE.Color };
+  private nextChunk = 0;
 
-  constructor() {
-    this.noise = new SimplexNoise2D(createRandom(WORLD_SEED));
+  constructor(readonly shape: IslandShape = MAIN_ISLAND) {
+    this.n = shape.segments;
+    this.cell = shape.size / shape.segments;
+    this.half = shape.size / 2;
+    this.noise = new SimplexNoise2D(createRandom(shape.seed));
     this.heights = new Float32Array((this.n + 1) * (this.n + 1));
     this.material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-    this.group.name = 'Terreno';
+    this.group.name = `Terreno: ${shape.name}`;
+    const g = shape.grass;
+    this.grass = g
+      ? { light: new THREE.Color(g.light), mid: new THREE.Color(g.mid), dark: new THREE.Color(g.dark) }
+      : { light: COLORS.grassLight, mid: COLORS.grass, dark: COLORS.grassDark };
+  }
+
+  private get minX(): number {
+    return this.shape.cx - this.half;
+  }
+
+  private get minZ(): number {
+    return this.shape.cz - this.half;
+  }
+
+  /** O ponto está dentro do quadrado coberto por este terreno? */
+  contains(x: number, z: number): boolean {
+    return Math.abs(x - this.shape.cx) < this.half && Math.abs(z - this.shape.cz) < this.half;
   }
 
   /** Calcula o mapa de alturas (rápido; chamado uma vez). */
   generateHeights(): void {
+    if (this.ready) return;
     const n = this.n;
     for (let iz = 0; iz <= n; iz++) {
       for (let ix = 0; ix <= n; ix++) {
-        const x = -WORLD_HALF + ix * this.cell;
-        const z = -WORLD_HALF + iz * this.cell;
+        const x = this.minX + ix * this.cell;
+        const z = this.minZ + iz * this.cell;
         this.heights[iz * (n + 1) + ix] = this.shapeHeight(x, z);
       }
     }
+    this.ready = true;
   }
 
-  /** Monta as malhas 3D dos chunks. */
+  /** Monta todas as malhas 3D de uma vez. */
   buildMeshes(): void {
-    const per = this.n / CHUNKS_PER_SIDE;
-    for (let cz = 0; cz < CHUNKS_PER_SIDE; cz++) {
-      for (let cx = 0; cx < CHUNKS_PER_SIDE; cx++) {
-        const geometry = this.buildChunkGeometry(cx * per, cz * per, per);
-        const mesh = new THREE.Mesh(geometry, this.material);
-        mesh.receiveShadow = true;
-        mesh.name = `chunk_${cx}_${cz}`;
-        mesh.matrixAutoUpdate = false;
-        this.group.add(mesh);
-      }
+    while (!this.buildNextChunk()) {
+      /* continua */
     }
+  }
+
+  /**
+   * Monta um único pedaço (chunk) da malha. Retorna verdadeiro quando todos
+   * já foram montados. Chamado um por quadro, o terreno "aparece" aos poucos
+   * sem travar o jogo — é assim que a segunda ilha é carregada sob demanda.
+   */
+  buildNextChunk(): boolean {
+    const total = CHUNKS_PER_SIDE * CHUNKS_PER_SIDE;
+    if (this.nextChunk >= total) return true;
+    this.generateHeights();
+    const per = this.n / CHUNKS_PER_SIDE;
+    const cx = this.nextChunk % CHUNKS_PER_SIDE;
+    const cz = Math.floor(this.nextChunk / CHUNKS_PER_SIDE);
+    const geometry = this.buildChunkGeometry(cx * per, cz * per, per);
+    const mesh = new THREE.Mesh(geometry, this.material);
+    mesh.receiveShadow = true;
+    mesh.name = `chunk_${cx}_${cz}`;
+    mesh.matrixAutoUpdate = false;
+    this.group.add(mesh);
+    this.nextChunk++;
+    return this.nextChunk >= total;
+  }
+
+  get chunksDone(): boolean {
+    return this.nextChunk >= CHUNKS_PER_SIDE * CHUNKS_PER_SIDE;
   }
 
   /** Altura do chão em qualquer ponto (interpolada nos triângulos da malha). */
   getHeight(x: number, z: number): number {
-    const fx = (x + WORLD_HALF) / this.cell;
-    const fz = (z + WORLD_HALF) / this.cell;
+    const fx = (x - this.minX) / this.cell;
+    const fz = (z - this.minZ) / this.cell;
     if (fx < 0 || fz < 0 || fx >= this.n || fz >= this.n) return -12;
+    if (!this.ready) return this.shapeHeight(x, z);
     const ix = Math.floor(fx);
     const iz = Math.floor(fz);
     const tx = fx - ix;
@@ -122,50 +193,14 @@ export class Terrain {
   // Forma da ilha
   // ---------------------------------------------------------------------------
 
-  /** Altura "natural" antes de aplainar áreas especiais. */
-  private rawHeight(x: number, z: number): number {
-    const noise = this.noise;
-    // Distância elíptica ao centro, com litoral irregular.
-    const nx = x / 158;
-    const nz = (z - 4) / 150;
-    let d = Math.sqrt(nx * nx + nz * nz);
-    d += noise.fbm(x * 0.009 + 11, z * 0.009 - 7, 3) * 0.13;
-
-    // A praia é mais larga ao sul, onde o jogador começa.
-    const beachWidth = lerp(0.055, 0.15, smoothstep(20, 110, z));
-    const c = 0.93 - d; // > 0 em terra firme
-
-    let h: number;
-    if (c < 0) {
-      h = Math.max(-11, c * 70); // fundo do mar
-    } else if (c < beachWidth) {
-      h = (c / beachWidth) * 1.3; // areia em rampa suave
-    } else {
-      // Subida suave da areia para o interior (cerca de 30 m).
-      const inland = c - beachWidth;
-      const hills = noise.fbm(x * 0.021, z * 0.021, 4) * 0.5 + 0.5;
-      h = 1.3 + smoothstep(0, 0.2, inland) * 2.4 + hills * 4.2 * smoothstep(0.02, 0.24, inland);
-    }
-
-    // Cordilheira ao norte (com cristas) — desce até o mar formando falésias.
-    const ridge = 1 - Math.abs(noise.noise(x * 0.03 + 40, z * 0.03 - 9));
-    const mountainMain = Math.exp(-(((x + 12) / 46) ** 2 + ((z + 104) / 33) ** 2));
-    const mountainEast = Math.exp(-(((x - 48) / 26) ** 2 + ((z + 78) / 22) ** 2));
-    const mountainWest = Math.exp(-(((x + 62) / 28) ** 2 + ((z + 76) / 24) ** 2));
-    const mountain = mountainMain * 46 + mountainEast * 22 + mountainWest * 18;
-    const landMask = smoothstep(-0.08, 0.06, c);
-    h += mountain * (0.78 + ridge * 0.28) * landMask;
-
-    return h;
-  }
-
   /** Altura final: forma natural + áreas aplainadas. */
-  private shapeHeight(x: number, z: number): number {
-    let h = this.rawHeight(x, z);
-    for (const zone of FLATTEN_ZONES) {
+  shapeHeight(x: number, z: number): number {
+    const raw = (px: number, pz: number) => this.shape.raw(px, pz, this.noise);
+    let h = raw(x, z);
+    for (const zone of this.shape.flatten) {
       const dist = Math.hypot(x - zone.x, z - zone.z);
       if (dist >= zone.radius) continue;
-      const target = zone.height ?? this.rawHeight(zone.x, zone.z) + (zone.raise ?? 0);
+      const target = zone.height ?? raw(zone.x, zone.z) + (zone.raise ?? 0);
       const w = 1 - smoothstep(zone.radius * 0.55, zone.radius, dist);
       h = lerp(h, target, w);
     }
@@ -195,15 +230,15 @@ export class Terrain {
         [cx, cz, hc],
       ];
       // Cor do triângulo inteiro (visual low-poly).
-      const wx = -WORLD_HALF + ((ax + bx + cx) / 3) * this.cell;
-      const wz = -WORLD_HALF + ((az + bz + cz) / 3) * this.cell;
+      const wx = this.minX + ((ax + bx + cx) / 3) * this.cell;
+      const wz = this.minZ + ((az + bz + cz) / 3) * this.cell;
       const avgH = (ha + hb + hc) / 3;
       const slope = (Math.max(ha, hb, hc) - Math.min(ha, hb, hc)) / this.cell;
       this.colorFor(wx, wz, avgH, slope, random(), color);
       for (const [vx, vz, vh] of verts) {
-        positions[p] = -WORLD_HALF + vx * this.cell;
+        positions[p] = this.minX + vx * this.cell;
         positions[p + 1] = vh;
-        positions[p + 2] = -WORLD_HALF + vz * this.cell;
+        positions[p + 2] = this.minZ + vz * this.cell;
         colors[p] = color.r;
         colors[p + 1] = color.g;
         colors[p + 2] = color.b;
@@ -231,10 +266,8 @@ export class Terrain {
   /** Escolhe a cor de um triângulo pela altura, inclinação e trilhas. */
   private colorFor(x: number, z: number, h: number, slope: number, rnd: number, out: THREE.Color): void {
     const variation = (rnd - 0.5) * 0.06;
-    const caveDist = Math.hypot(x - PLACES.cave.x, z - PLACES.cave.z);
-    if (caveDist < 9.5) {
-      // Chão de pedra dentro e na entrada da caverna.
-      out.copy(caveDist < 6 ? COLORS.rockDark : COLORS.rock).lerp(COLORS.path, caveDist < 6 ? 0.1 : 0.35);
+    if (this.shape.specialColor?.(x, z, out)) {
+      // Cor definida pela própria ilha (ex.: chão de pedra da caverna).
     } else if (h < WATER_LEVEL - 0.6) {
       out.copy(COLORS.seabed);
     } else if (h < WATER_LEVEL + 0.25) {
@@ -248,14 +281,63 @@ export class Terrain {
     } else {
       // Grama: mistura de tons conforme o ruído.
       const n = this.noise.noise(x * 0.05, z * 0.05) * 0.5 + 0.5;
-      if (n > 0.62) out.copy(COLORS.grassDark);
-      else if (n < 0.3) out.copy(COLORS.grassLight);
-      else out.copy(COLORS.grass);
+      if (n > 0.62) out.copy(this.grass.dark);
+      else if (n < 0.3) out.copy(this.grass.light);
+      else out.copy(this.grass.mid);
       if (h < 1.9) out.lerp(COLORS.sand, 0.45);
       // Trilhas de terra.
-      const dPath = distanceToPaths(x, z);
+      const dPath = this.shape.pathDistance?.(x, z) ?? Infinity;
       if (dPath < 2.2) out.lerp(COLORS.path, clamp(1.3 - dPath / 2.2, 0, 1));
     }
     out.offsetHSL(0, 0, variation);
+  }
+}
+
+/**
+ * Conjunto de todas as ilhas: responde a altura do chão em qualquer ponto do
+ * mundo, perguntando à ilha certa. Uma ilha ainda não carregada responde com
+ * a fórmula da forma (mais lenta, mas permite colorir o mar antes da visita).
+ */
+export class TerrainSet implements HeightField {
+  readonly group = new THREE.Group();
+  readonly islands: Terrain[];
+
+  constructor(shapes: IslandShape[]) {
+    this.islands = shapes.map((shape) => new Terrain(shape));
+    for (const t of this.islands) this.group.add(t.group);
+    this.group.name = 'Terrenos';
+  }
+
+  get(id: IslandId): Terrain {
+    return this.islands.find((t) => t.shape.id === id)!;
+  }
+
+  /** Terreno que cobre o ponto (ou null em mar aberto). */
+  terrainAt(x: number, z: number): Terrain | null {
+    for (const t of this.islands) if (t.contains(x, z)) return t;
+    return null;
+  }
+
+  getHeight(x: number, z: number): number {
+    return this.terrainAt(x, z)?.getHeight(x, z) ?? -12;
+  }
+
+  getSlope(x: number, z: number): number {
+    const e = 0.8;
+    const dx = this.getHeight(x + e, z) - this.getHeight(x - e, z);
+    const dz = this.getHeight(x, z + e) - this.getHeight(x, z - e);
+    return Math.hypot(dx, dz) / (2 * e);
+  }
+
+  getNormal(x: number, z: number, target = new THREE.Vector3()): THREE.Vector3 {
+    const e = 0.8;
+    const dx = this.getHeight(x + e, z) - this.getHeight(x - e, z);
+    const dz = this.getHeight(x, z + e) - this.getHeight(x, z - e);
+    return target.set(-dx, 2 * e, -dz).normalize();
+  }
+
+  /** Todos os pedaços de terreno já montados (para esconder os distantes). */
+  get chunks(): THREE.Mesh[] {
+    return this.islands.flatMap((t) => t.group.children as THREE.Mesh[]);
   }
 }

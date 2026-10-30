@@ -8,6 +8,7 @@ import { safeStorage } from './storage';
 export type Quality = 'baixa' | 'media' | 'alta';
 export type ControlMode = 'auto' | 'desktop' | 'touch';
 export type DayLength = 'curto' | 'normal' | 'longo';
+export type CharacterLook = 'explorador' | 'robo';
 
 export interface SettingsData {
   quality: Quality;
@@ -15,11 +16,23 @@ export interface SettingsData {
   sensitivity: number; // 0.3 a 2.0
   invertY: boolean;
   showFps: boolean;
+  /** Reduz a qualidade sozinho quando o jogo fica lento. */
+  autoQuality: boolean;
   volumeMaster: number; // 0 a 1
   volumeSfx: number;
   volumeAmbient: number;
   volumeMusic: number;
   dayLength: DayLength;
+  /** Aparência do personagem. */
+  character: CharacterLook;
+  /** Tamanho da interface (1 = normal). */
+  uiScale: number;
+  /** Cores pensadas para daltonismo (azul/laranja no lugar de verde/vermelho). */
+  colorblind: boolean;
+  /** Menos animações e sem tremor de câmera. */
+  reduceMotion: boolean;
+  /** Teclas trocadas pelo jogador (ação → código da tecla). */
+  keys: Record<string, string>;
 }
 
 /** Parâmetros técnicos de cada nível de qualidade. */
@@ -88,11 +101,17 @@ function defaultSettings(): SettingsData {
     sensitivity: 1,
     invertY: false,
     showFps: false,
+    autoQuality: true,
     volumeMaster: 0.8,
     volumeSfx: 0.8,
     volumeAmbient: 0.6,
     volumeMusic: 0.4,
     dayLength: 'normal',
+    character: 'explorador',
+    uiScale: 1,
+    colorblind: false,
+    reduceMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+    keys: {},
   };
 }
 

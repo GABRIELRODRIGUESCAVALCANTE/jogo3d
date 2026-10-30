@@ -65,4 +65,19 @@ export const LORE: Record<string, LoreEntry> = {
       'Sua jornada nesta ilha está completa… por enquanto. Continue explorando, construindo e aguarde novas regiões!',
     ],
   },
+  pedra_aurora: {
+    title: 'A pedra da chegada',
+    paragraphs: [
+      '"Viajante que seguiu a luz do farol: bem-vindo à Aurora, nossa última morada antes da grande travessia."',
+      '"Três pilares guardam a luz desta ilha. Desperte-os com cristais e o observatório mostrará o caminho que seguimos."',
+    ],
+  },
+  observatorio: {
+    title: 'O Observatório dos Lumeni',
+    paragraphs: [
+      'Os pilares respondem ao mesmo tempo e o telescópio de cristal gira sozinho. Faixas de luz verde e lilás se abrem sobre a ilha.',
+      'Gravado na base do telescópio, um mapa de estrelas mostra ilhas que você nunca viu, ligadas por linhas de luz.',
+      'Os Lumeni não desapareceram: eles aprenderam a navegar pelas luzes do céu. E deixaram o caminho aberto para quem viesse depois.',
+    ],
+  },
 };

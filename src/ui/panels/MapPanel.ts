@@ -29,7 +29,7 @@ export class MapPanel extends Panel {
         <aside class="map-side">
           <h3>Regiões descobertas</h3>
           <ul class="region-list">${regions}</ul>
-          <div class="map-stat">${icon('bussola')} Ilha explorada: <b>${Math.round(ws.exploredPercent * 100)}%</b></div>
+          <div class="map-stat">${icon('bussola')} Ilha explorada: <b>${Math.round(ws.exploredFraction(this.game.currentMap === this.game.auroraMap ? 'aurora' : 'principal') * 100)}%</b></div>
           <div class="map-legend">
             <span><i class="lg lg-player"></i>Você</span>
             <span><i class="lg lg-quest"></i>Objetivo</span>
@@ -64,7 +64,8 @@ export class MapPanel extends Panel {
       canvas.style.height = `${size}px`;
     }
     const ws = this.game.worldState;
-    const labels = REGIONS.filter((r) => ws.discovered.has(r.id)).map((r) => ({ x: r.x, z: r.z, text: r.name }));
-    this.game.mapRenderer.drawFull(canvas, ws, this.game.mapView(true), labels);
+    const map = this.game.currentMap;
+    const labels = REGIONS.filter((r) => ws.discovered.has(r.id) && map.covers(r.x, r.z)).map((r) => ({ x: r.x, z: r.z, text: r.name }));
+    map.drawFull(canvas, ws, this.game.mapView(true), labels);
   }
 }

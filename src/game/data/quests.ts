@@ -7,6 +7,7 @@ import type { ItemBundle, ItemId } from './items';
 import type { RegionId } from './regions';
 import type { StructureId } from './structures';
 import { PLACES, type Place } from '../world/layout';
+import { AURORA_PLACES } from '../world/islands';
 
 export type ObjectiveDef =
   | { type: 'collect'; item: ItemId; amount: number }
@@ -113,6 +114,42 @@ export const QUESTS: QuestDef[] = [
     completeText: 'Você agora tem um lar. Use a cama da cabana para dormir até o amanhecer.',
   },
   {
+    id: 'q_pesca',
+    title: 'Pescador da Ilha',
+    description: 'Fabrique uma vara de pesca. Na beira da água, perto de onde os peixes saltam, interaja para pescar e puxe na hora certa!',
+    objectives: [
+      { type: 'craft', item: 'vara_de_pesca', amount: 1 },
+      { type: 'collect', item: 'peixe', amount: 3 },
+    ],
+    requires: ['q_ferramentas'],
+    rewards: { xp: 70, items: { corda: 1 } },
+    target: { x: 0, z: 140 },
+  },
+  {
+    id: 'q_horta',
+    title: 'Mãos na Terra',
+    description: 'Arranque capim para achar sementes, construa um canteiro, plante e espere crescer para colher batatas-doces.',
+    objectives: [
+      { type: 'build', structure: 'canteiro', amount: 1 },
+      { type: 'collect', item: 'batata_doce', amount: 3 },
+    ],
+    requires: ['q_fogueira'],
+    rewards: { xp: 70 },
+  },
+  {
+    id: 'q_casa',
+    title: 'Casa do Seu Jeito',
+    description: 'Use as peças modulares: pisos, paredes e telhados de palha se encaixam numa grade. Monte uma casa do seu jeito!',
+    objectives: [
+      { type: 'build', structure: 'piso', amount: 4 },
+      { type: 'build', structure: 'parede', amount: 3 },
+      { type: 'build', structure: 'telhado', amount: 2 },
+    ],
+    requires: ['q_cabana'],
+    rewards: { xp: 120, items: { corda: 2 } },
+    target: PLACES.clearing,
+  },
+  {
     id: 'q_ruinas',
     title: 'Ecos do Passado',
     description: 'O fragmento do baú tem símbolos estranhos. Siga a trilha a leste até as ruínas e examine o monólito.',
@@ -186,6 +223,51 @@ export const QUESTS: QuestDef[] = [
     rewards: { xp: 200 },
     target: PLACES.peak,
     completeText: 'O farol brilha outra vez. Muito além do horizonte, outra luz responde...',
+  },
+  // ----- Capítulo 2: a Ilha da Aurora -----
+  {
+    id: 'q_barco',
+    title: 'Rumo ao Desconhecido',
+    description: 'A luz que respondeu ao farol vem do nordeste. Construa um barco a vela na água rasa, perto da praia.',
+    objectives: [{ type: 'build', structure: 'barco', amount: 1 }],
+    requires: ['q_horizonte'],
+    rewards: { xp: 120 },
+    target: { x: 2, z: 141 },
+  },
+  {
+    id: 'q_aurora',
+    title: 'Terra à Vista',
+    description: 'Embarque e navegue para o nordeste, seguindo o feixe de luz, até a Ilha da Aurora. Leia a pedra gravada na praia.',
+    objectives: [
+      { type: 'visit', region: 'aurora' },
+      { type: 'interact', target: 'pedra_aurora', label: 'Leia a pedra gravada da praia' },
+    ],
+    requires: ['q_barco'],
+    rewards: { xp: 150 },
+    target: AURORA_PLACES.loreStone,
+  },
+  {
+    id: 'q_pilares',
+    title: 'As Três Luzes',
+    description: 'Desperte os três pilares de cristal da Aurora. Cada um precisa de 2 cristais (há cristais perto deles).',
+    objectives: [
+      { type: 'interact', target: 'pilar_oeste', label: 'Desperte o Pilar do Oeste' },
+      { type: 'interact', target: 'pilar_leste', label: 'Desperte o Pilar do Leste' },
+      { type: 'interact', target: 'pilar_sul', label: 'Desperte o Pilar do Sul' },
+    ],
+    requires: ['q_aurora'],
+    rewards: { xp: 180 },
+    target: AURORA_PLACES.pylonWest,
+  },
+  {
+    id: 'q_observatorio',
+    title: 'O Observatório dos Lumeni',
+    description: 'Com os três pilares acesos, suba a colina e ative o observatório.',
+    objectives: [{ type: 'interact', target: 'observatorio', label: 'Ative o observatório' }],
+    requires: ['q_pilares'],
+    rewards: { xp: 250 },
+    target: AURORA_PLACES.observatory,
+    completeText: 'O céu da Aurora se enche de luz. Os Lumeni deixaram um caminho entre as estrelas...',
   },
 ];
 

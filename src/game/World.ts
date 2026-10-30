@@ -11,7 +11,9 @@ import { Decorations } from './world/Decorations';
 import { Landmarks, type LandmarkHooks } from './world/Landmarks';
 import { ResourceManager } from './world/ResourceNodes';
 import { Sky } from './world/Sky';
-import { Terrain } from './world/Terrain';
+import { TerrainSet } from './world/Terrain';
+import { AURORA_CENTER, ISLAND_SHAPES } from './world/islands';
+import { AuroraLandmarks } from './world/AuroraLandmarks';
 import { Water } from './world/Water';
 
 export type ProgressCallback = (fraction: number, label: string) => Promise<void>;
@@ -22,13 +24,19 @@ export class World {
   readonly sun = new THREE.DirectionalLight('#fff4dc', 3);
   readonly hemi = new THREE.HemisphereLight('#d8efff', '#7d8f5c', 1.2);
   readonly windTime = { value: 0 };
-  readonly terrain = new Terrain();
+  readonly terrain = new TerrainSet(ISLAND_SHAPES);
   readonly sky = new Sky();
   readonly dayNight: DayNight;
   water!: Water;
   resources!: ResourceManager;
   decorations!: Decorations;
   landmarks!: Landmarks;
+  /** Conteúdo da Ilha da Aurora (criado só quando o jogador se aproxima). */
+  auroraResources: ResourceManager | null = null;
+  auroraDecorations: Decorations | null = null;
+  auroraLandmarks: AuroraLandmarks | null = null;
+  /** Avisado quando a Aurora começa a ser montada (o jogo cria a fauna dela). */
+  onAuroraCreated: (() => void) | null = null;
 
   /** Feixe de luz que marca o objetivo da missão. */
   readonly questBeacon: THREE.Mesh;
@@ -96,9 +104,10 @@ export class World {
   /** Gera tudo, informando o progresso para a tela de carregamento. */
   async generate(progress: ProgressCallback): Promise<void> {
     await progress(0.05, 'Moldando a ilha…');
-    this.terrain.generateHeights();
+    const main = this.terrain.get('principal');
+    main.generateHeights();
     await progress(0.2, 'Esculpindo montanhas e praias…');
-    this.terrain.buildMeshes();
+    main.buildMeshes();
     this.scene.add(this.terrain.group);
 
     await progress(0.35, 'Enchendo o oceano…');
@@ -121,6 +130,38 @@ export class World {
     this.landmarks.build();
     this.scene.add(this.landmarks.group);
     await progress(0.95, 'Quase lá…');
+  }
+
+  /** Todos os gerenciadores de recursos (uma ilha cada). */
+  get resourceManagers(): ResourceManager[] {
+    return this.auroraResources ? [this.resources, this.auroraResources] : [this.resources];
+  }
+
+  get auroraCreated(): boolean {
+    return this.auroraLandmarks !== null;
+  }
+
+  /**
+   * Cria a Ilha da Aurora: alturas, recursos, decorações e marcos agora; a
+   * malha do terreno vai aparecendo aos poucos (um pedaço por quadro).
+   */
+  createAurora(density: number): void {
+    if (this.auroraLandmarks) return;
+    this.terrain.get('aurora').generateHeights();
+    this.auroraResources = new ResourceManager(this.terrain, this.collision, this.windTime);
+    this.auroraResources.generate('aurora');
+    this.auroraResources.onHit = this.resources.onHit;
+    this.scene.add(this.auroraResources.group);
+    this.interaction.addProvider(this.auroraResources);
+    this.auroraDecorations = new Decorations(this.terrain, this.windTime);
+    this.auroraDecorations.generate({ x: AURORA_CENTER.x, z: AURORA_CENTER.z, extent: 130, seed: 5 });
+    this.auroraDecorations.setDensity(density);
+    this.scene.add(this.auroraDecorations.group);
+    this.auroraLandmarks = new AuroraLandmarks(this.terrain, this.collision, this.interaction, this.lights, this.landmarkHooks);
+    this.auroraLandmarks.build();
+    this.auroraLandmarks.applyFlags();
+    this.scene.add(this.auroraLandmarks.group);
+    this.onAuroraCreated?.();
   }
 
   setRenderDistance(distance: number): void {
@@ -173,8 +214,12 @@ export class World {
     this.sun.target.updateMatrixWorld();
 
     // Esconde pedaços do terreno muito distantes (economiza GPU).
-    for (const chunk of this.terrain.group.children) {
-      const mesh = chunk as THREE.Mesh;
+    // Ilha da Aurora: monta um pedaço do terreno por quadro até terminar.
+    const aurora = this.terrain.get('aurora');
+    if (this.auroraLandmarks && !aurora.chunksDone) aurora.buildNextChunk();
+    this.auroraLandmarks?.update(dt, elapsed, this.dayNight.night);
+
+    for (const mesh of this.terrain.chunks) {
       const sphere = mesh.geometry.boundingSphere!;
       const d = Math.hypot(sphere.center.x - camera.position.x, sphere.center.z - camera.position.z);
       mesh.visible = this.menuView || d - sphere.radius < this.renderDistance + 20;

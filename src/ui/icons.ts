@@ -102,6 +102,66 @@ export const ICONS: Record<string, string> = {
     <path d="M16 7l2.5 3.5-2.5 4-2.5-4z" fill="#7ef4ff"/>
     <rect x="12" y="27" width="8" height="3" rx="1" fill="#9d978d"/>`),
 
+  vara_de_pesca: svg(`
+    <path d="M5 29L25 4" stroke="#8b5a2b" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M25 4c2 6 3 13 1 19" stroke="#e8f4ff" stroke-width="1.2" fill="none"/>
+    <circle cx="26" cy="24" r="2.4" fill="#ff5a4f"/>
+    <rect x="7" y="22" width="4" height="4" rx="2" fill="#c9a26b"/>`),
+  peixe: svg(`
+    <path d="M4 16c5-7 14-8 20-2l5-5v14l-5-5c-6 6-15 5-20-2z" fill="#3fb0e6"/>
+    <path d="M4 16c5-3 12-4 18 0-6 3-13 3-18 0z" fill="#8fe0ff"/>
+    <circle cx="9" cy="14" r="1.5" fill="#123"/>`),
+  peixe_assado: svg(`
+    <path d="M4 17c5-7 14-8 20-2l5-5v14l-5-5c-6 6-15 5-20-2z" fill="#c8732e"/>
+    <path d="M10 14l2 6M15 13l2 7M20 14l1 5" stroke="#7a3f14" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M12 7c-1-2 1-3 0-5M18 7c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.4" fill="none" stroke-linecap="round"/>`),
+  semente: svg(`
+    <ellipse cx="11" cy="19" rx="4" ry="6" fill="#b88a4a" transform="rotate(-25 11 19)"/>
+    <ellipse cx="21" cy="17" rx="4" ry="6" fill="#a8783c" transform="rotate(20 21 17)"/>
+    <path d="M16 12c0-5 3-8 7-9-1 4-3 7-7 9z" fill="#5cb848"/>`),
+  batata_doce: svg(`
+    <path d="M5 20c2-8 13-13 21-8 4 3 1 11-7 13-7 2-15 2-14-5z" fill="#c8573a"/>
+    <path d="M10 18c4-3 9-4 13-3" stroke="#e98b62" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M24 10c2-3 4-4 6-4-1 3-3 4-6 4z" fill="#5cb848"/>`),
+  batata_assada: svg(`
+    <path d="M5 20c2-8 13-13 21-8 4 3 1 11-7 13-7 2-15 2-14-5z" fill="#8a3e22"/>
+    <path d="M12 16c3-2 7-2 9 0-3 3-6 3-9 0z" fill="#ffcf5c"/>
+    <path d="M12 9c-1-2 1-3 0-5M18 9c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.4" fill="none" stroke-linecap="round"/>`),
+  bau: svg(`
+    <rect x="4" y="13" width="24" height="14" rx="2" fill="#9a6a3f"/>
+    <path d="M4 13c0-6 24-6 24 0z" fill="#b98552"/>
+    <rect x="4" y="16" width="24" height="2.5" fill="#d9b24c"/>
+    <rect x="14" y="15" width="4" height="6" rx="1" fill="#d9b24c"/>`),
+  canteiro: svg(`
+    <rect x="3" y="20" width="26" height="8" rx="1.5" fill="#6b4a2e"/>
+    <rect x="3" y="18" width="26" height="3" fill="#7a5232"/>
+    <path d="M9 18c-2-5 0-9 3-10 0 4-1 7-3 10zM16 18c0-6 2-9 5-10-1 4-2 7-5 10zM23 18c-1-4 1-7 3-8 0 3-1 6-3 8z" fill="#5cb848"/>`),
+  piso: svg(`
+    <path d="M3 18l13-7 13 7-13 7z" fill="#c4925e"/>
+    <path d="M7 16l13 7M11 14l13 7M3 18v3l13 7v-3zM29 18v3l-13 7v-3z" stroke="#7a5232" stroke-width="1.2" fill="#9a6a3f"/>`),
+  parede: svg(`
+    <rect x="4" y="7" width="24" height="20" rx="1" fill="#9a6a3f"/>
+    <path d="M4 12h24M4 17h24M4 22h24" stroke="#6b4528" stroke-width="1.5"/>`),
+  parede_porta: svg(`
+    <rect x="4" y="7" width="24" height="20" rx="1" fill="#9a6a3f"/>
+    <path d="M4 12h24M4 17h24M4 22h24" stroke="#6b4528" stroke-width="1.5"/>
+    <rect x="12" y="12" width="8" height="15" fill="#3a2614"/>`),
+  parede_janela: svg(`
+    <rect x="4" y="7" width="24" height="20" rx="1" fill="#9a6a3f"/>
+    <path d="M4 12h24M4 22h24" stroke="#6b4528" stroke-width="1.5"/>
+    <rect x="11" y="13" width="10" height="7" fill="#8fd3ff"/>
+    <path d="M16 13v7" stroke="#6b4528" stroke-width="1.5"/>`),
+  barco: svg(`
+    <path d="M3 21h26l-4 6H8z" fill="#9a6a3f"/>
+    <path d="M16 3v17" stroke="#6b4528" stroke-width="2"/>
+    <path d="M16 4l9 15h-9z" fill="#f4ead2"/>
+    <path d="M15 7l-8 12h8z" fill="#ffd9a0"/>
+    <path d="M2 28c4-2 7 2 11 0s7 2 11 0 5 2 6 0" stroke="#3fb0e6" stroke-width="2" fill="none"/>`),
+  telhado: svg(`
+    <path d="M2 20L16 7l14 13z" fill="#d9b45a"/>
+    <path d="M6 17h20M10 13h12" stroke="#a8843a" stroke-width="1.6"/>
+    <rect x="6" y="20" width="20" height="3" fill="#7a5232"/>`),
+
   // ----- Interface -----
   mochila: ui(`<path d="M9 11a7 7 0 0 1 14 0v15a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z"/><path d="M12 11V8a4 4 0 0 1 8 0v3"/><path d="M12 19h8v5h-8z"/>`),
   martelo: ui(`<path d="M15 13L5 26l2 2 12-11"/><path d="M14 8l6-4 8 8-4 6z"/>`),
@@ -122,6 +182,7 @@ export const ICONS: Record<string, string> = {
   play: ui(`<path d="M10 6l16 10-16 10z"/>`),
   info: ui(`<circle cx="16" cy="16" r="12"/><path d="M16 15v8M16 10v.5"/>`),
   tela: ui(`<path d="M5 11V5h6M21 5h6v6M27 21v6h-6M11 27H5v-6"/>`),
+  fome: svg(`<path d="M9 4v9a3 3 0 0 0 6 0V4M12 4v24" stroke="#ffb347" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M21 4c4 2 4 10 0 12v12" stroke="#ffb347" stroke-width="2.4" fill="none" stroke-linecap="round"/>`),
   remover: ui(`<path d="M6 26L26 6"/><path d="M5 15l7-7M17 27l10-10"/>`),
   alvo: ui(`<circle cx="16" cy="16" r="11"/><circle cx="16" cy="16" r="5"/><path d="M16 2v5M16 25v5M2 16h5M25 16h5"/>`),
   estrela: svg(`<path d="M16 3l4 8.5 9 1.2-6.6 6.2 1.7 9.1L16 23.6 7.9 28l1.7-9.1L3 12.7l9-1.2z" fill="#ffd166" stroke="#c98f1d" stroke-width="1.5" stroke-linejoin="round"/>`),

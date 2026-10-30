@@ -24,7 +24,8 @@ import {
   makeStump,
 } from '../models/props';
 import type { NodeSave } from '../save/SaveData';
-import type { Terrain } from './Terrain';
+import type { HeightField, IslandId } from './Terrain';
+import { AURORA_CENTER, AURORA_KEEP_CLEAR, AURORA_PLACES, auroraPathDistance } from './islands';
 import { PLACES, WORLD_SEED, distanceToPaths, type Place } from './layout';
 
 export interface ResourceNode {
@@ -84,6 +85,8 @@ export class ResourceManager implements InteractableProvider {
   private byId = new Map<string, ResourceNode>();
   private animating = new Set<ResourceNode>();
   private respawnTimer = 0;
+  /** Prefixo dos ids (ilhas diferentes não podem repetir ids no salvamento). */
+  private idPrefix = '';
   private readonly matrix = new THREE.Matrix4();
   private readonly quat = new THREE.Quaternion();
   private readonly quatYaw = new THREE.Quaternion();
@@ -93,7 +96,7 @@ export class ResourceManager implements InteractableProvider {
   private readonly zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
 
   constructor(
-    private readonly terrain: Terrain,
+    private readonly terrain: HeightField,
     private readonly collision: CollisionWorld,
     private readonly windTime: { value: number },
   ) {
@@ -104,8 +107,15 @@ export class ResourceManager implements InteractableProvider {
   // Geração
   // ---------------------------------------------------------------------------
 
-  generate(): void {
-    const random = createRandom(WORLD_SEED + 1);
+  /** Espalha os recursos de uma ilha (cada ilha tem seu próprio gerenciador). */
+  generate(island: IslandId = 'principal'): void {
+    const aurora = island === 'aurora';
+    this.idPrefix = aurora ? 'aurora:' : '';
+    const center = aurora ? AURORA_CENTER : { x: 0, z: 0 };
+    const extent = aurora ? 125 : 165;
+    const keepClear = aurora ? AURORA_KEEP_CLEAR : KEEP_CLEAR;
+    const pathDistance = aurora ? auroraPathDistance : distanceToPaths;
+    const random = createRandom(WORLD_SEED + (aurora ? 41 : 1));
     const placed: Array<{ x: number; z: number; r: number }> = [];
 
     const tooClose = (x: number, z: number, spacing: number) => {
@@ -113,8 +123,8 @@ export class ResourceManager implements InteractableProvider {
       return false;
     };
     const blocked = (x: number, z: number, pathClear: number) => {
-      for (const zone of KEEP_CLEAR) if (Math.hypot(x - zone.x, z - zone.z) < zone.radius) return true;
-      return distanceToPaths(x, z) < pathClear;
+      for (const zone of keepClear) if (Math.hypot(x - zone.x, z - zone.z) < zone.radius) return true;
+      return pathDistance(x, z) < pathClear;
     };
 
     const scatter = (
@@ -128,8 +138,8 @@ export class ResourceManager implements InteractableProvider {
       let attempts = 0;
       while (made < count && attempts < count * 60) {
         attempts++;
-        const x = randRange(random, -165, 165);
-        const z = randRange(random, -165, 165);
+        const x = center.x + randRange(random, -extent, extent);
+        const z = center.z + randRange(random, -extent, extent);
         if (opts.area && !opts.area(x, z)) continue;
         const h = this.terrain.getHeight(x, z);
         if (h < opts.minH || h > opts.maxH) continue;
@@ -148,6 +158,22 @@ export class ResourceManager implements InteractableProvider {
         this.addNode(kind, i % variants, x, z, random() * Math.PI * 2, scale);
       });
     };
+
+    if (aurora) {
+      // Aurora: floresta azulada, muitos cristais perto dos pilares.
+      const crystalRing = [AURORA_PLACES.pylonWest, AURORA_PLACES.pylonEast, AURORA_PLACES.pylonSouth].flatMap((p) =>
+        [0, 1, 2].map((i): [number, number] => [p.x + Math.cos(i * 2.1) * 10.5, p.z + Math.sin(i * 2.1) * 10.5]),
+      );
+      fixed('cristal', crystalRing);
+      scatter('palmeira', 18, { minH: 0.35, maxH: 2.3, maxSlope: 0.5, spacing: 6, pathClear: 2 }, 3, [0.85, 1.2]);
+      scatter('arvore', 70, { minH: 2, maxH: 18, maxSlope: 0.65, spacing: 4.6, pathClear: 3.2 }, 3, [0.8, 1.4]);
+      scatter('rocha', 34, { minH: 0.6, maxH: 30, maxSlope: 1.2, spacing: 4, pathClear: 2 }, 3, [0.6, 1.3]);
+      scatter('arbusto', 22, { minH: 2, maxH: 14, maxSlope: 0.6, spacing: 4, pathClear: 2 }, 1, [0.85, 1.2]);
+      scatter('capim', 40, { minH: 1.3, maxH: 12, maxSlope: 0.7, spacing: 3, pathClear: 1.5 }, 1, [0.85, 1.25]);
+      scatter('cristal', 8, { minH: 6, maxH: 30, maxSlope: 0.8, spacing: 8, pathClear: 2 }, 1, [0.8, 1.1]);
+      this.buildMeshes();
+      return;
+    }
 
     // Recursos garantidos perto do início (para as primeiras missões).
     fixed('palmeira', [[-8, 119], [-14, 113], [-3, 112], [12, 117], [-27, 127], [21, 123], [-12, 131]], 1, 3);
@@ -187,7 +213,7 @@ export class ResourceManager implements InteractableProvider {
     const def = NODE_KINDS[kind];
     const y = this.terrain.getHeight(x, z) - 0.05;
     const node: ResourceNode = {
-      id: `${kind}_${this.nodes.length}`,
+      id: `${this.idPrefix}${kind}_${this.nodes.length}`,
       kind,
       def,
       variant,
