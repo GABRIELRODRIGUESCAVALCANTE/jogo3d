@@ -88,8 +88,9 @@ test('casa de dois andares com porta, escada e móveis', async ({ page }) => {
   await expect
     .poll(() => noJogo(page, (g) => g.player.position.y), { timeout: 60_000 })
     .toBeGreaterThan(cima.y! + 0.1);
+  // Continua andando até sair da escada e pisar no segundo andar.
+  await expect.poll(() => noJogo(page, (g) => g.player.position.x), { timeout: 60_000 }).toBeGreaterThan(34.4);
   await page.keyboard.up('KeyW');
-  await expect.poll(() => noJogo(page, (g) => g.player.position.x)).toBeGreaterThan(34);
   expect(await noJogo(page, (g) => g.building.structures.find((s) => s.upper)!.model.root.visible)).toBe(true);
 
   // Móveis no segundo andar.

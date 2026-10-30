@@ -39,15 +39,33 @@ test('domesticar a raposa e escavar um tesouro', async ({ page }) => {
   expect(await noJogo(page, (g) => g.inventory.count('fruta'))).toBe(2);
   await expect.poll(() => noJogo(page, (g) => g.pet['root'] !== null)).toBe(true);
 
-  // Ela segue o jogador.
-  await noJogo(page, (g) => {
-    const p = g.player.position;
-    g.player.teleport(p.x + 12, g.world.terrain.getHeight(p.x + 12, p.z) + 0.3, p.z, g.player.yaw);
-  });
+  // Ela segue o jogador. (Sem nada para farejar por perto: senão ela vai
+  // primeiro até o tesouro ou baú e espera lá, de propósito.)
+  const semCheiro = ['bau_praia', 'bau_floresta', 'bau_caverna'];
+  await noJogo(
+    page,
+    (g, baus) => {
+      for (const t of g.pet.treasures) g.worldState.flags.add(`${t.id}_cavado`);
+      for (const b of baus) g.worldState.flags.add(b);
+      g.pet.target = null;
+      g.pet.state = 'follow';
+      const p = g.player.position;
+      g.player.teleport(p.x + 12, g.world.terrain.getHeight(p.x + 12, p.z) + 0.3, p.z, g.player.yaw);
+    },
+    semCheiro,
+  );
   await expect
     .poll(() => noJogo(page, (g) => g.pet.position.distanceTo(g.player.position)), { timeout: 60_000 })
     .toBeLessThan(4);
   await page.screenshot({ path: 'test-results/raposa.png' });
+  await noJogo(
+    page,
+    (g, baus) => {
+      for (const t of g.pet.treasures) g.worldState.flags.delete(`${t.id}_cavado`);
+      for (const b of baus) g.worldState.flags.delete(b);
+    },
+    semCheiro,
+  );
 
   // Perto de um tesouro, ela fareja e cava; o jogador escava.
   const t = await noJogo(page, (g) => {

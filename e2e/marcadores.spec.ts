@@ -27,7 +27,8 @@ test('colocar, tirar e salvar marcadores no mapa', async ({ page }) => {
   await expect(page.locator('[data-pin-clear]')).toHaveText('Limpar (2)');
   await page.screenshot({ path: 'test-results/marcadores.png' });
 
-  // Clicar de novo no primeiro tira ele.
+  // Clicar de novo no primeiro tira ele (o mapa não muda de lugar entre os toques).
+  expect(await mapa.boundingBox()).toEqual(caixa);
   await page.mouse.click(caixa.x + caixa.width * 0.5 + 2, caixa.y + caixa.height * 0.5 + 1);
   await expect.poll(() => noJogo(page, (g) => g.pins.length)).toBe(1);
   await page.keyboard.press('Escape');

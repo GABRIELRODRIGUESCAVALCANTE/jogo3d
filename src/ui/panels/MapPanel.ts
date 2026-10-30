@@ -88,7 +88,14 @@ export class MapPanel extends Panel {
     // Raio de toque: uns 14 pixels de tela (fácil de acertar no celular).
     const radius = map.metersPerPixel(canvas) * (canvas.width / rect.width) * 14;
     this.game.toggleMapPin(x, z, this.pinColor, radius);
-    this.render();
+    // Só atualiza o botão e o desenho: refazer o painel inteiro poderia mexer
+    // no tamanho do mapa entre um toque e outro.
+    const clear = this.body.querySelector<HTMLButtonElement>('[data-pin-clear]');
+    if (clear) {
+      clear.textContent = `Limpar (${this.game.pins.length})`;
+      clear.disabled = this.game.pins.length === 0;
+    }
+    this.draw();
   }
 
   private draw(): void {
