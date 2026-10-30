@@ -264,6 +264,24 @@ export const ICONS: Record<string, string> = {
     <path d="M4 7c4-2 8-2 12 1v19c-4-3-8-3-12-1z" fill="#f6ecd2" stroke="#7a3f2a" stroke-width="1.5" stroke-linejoin="round"/>
     <path d="M28 7c-4-2-8-2-12 1v19c4-3 8-3 12-1z" fill="#f1e6c8" stroke="#7a3f2a" stroke-width="1.5" stroke-linejoin="round"/>
     <path d="M7 12h6M7 16h6M19 12h6M19 16h6M19 20h4" stroke="#b9a27a" stroke-width="1.2"/>`),
+  iara: svg(`
+    <rect x="9" y="19" width="14" height="11" rx="2" fill="#2f6fb0"/>
+    <rect x="9" y="18" width="14" height="3" fill="#d62828"/>
+    <rect x="10" y="8" width="12" height="11" rx="2" fill="#c68b59"/>
+    <path d="M9 10h14v-2H9z" fill="#3d2b1f"/>
+    <path d="M5 8h22v2H5zM10 3h12v5H10z" fill="#1f2a44"/>
+    <rect x="15" y="4" width="2" height="2" fill="#ffd166"/>
+    <rect x="12.5" y="12" width="2" height="2" fill="#111"/><rect x="17.5" y="12" width="2" height="2" fill="#111"/>`),
+  guardia: svg(`
+    <circle cx="16" cy="16" r="14" fill="#bfefff" opacity="0.25"/>
+    <path d="M16 12l7 18H9z" fill="#e6fbff"/>
+    <circle cx="16" cy="9" r="4" fill="#ffffff"/>
+    <ellipse cx="16" cy="4.5" rx="5" ry="1.4" fill="none" stroke="#9fe8ff" stroke-width="1.4"/>
+    <path d="M6 17h20" stroke="#e6fbff" stroke-width="2" stroke-linecap="round"/>`),
+  sino: svg(`
+    <path d="M7 4h18" stroke="#7a5232" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M16 5c-5 0-7 4-7 9v6l-3 4h20l-3-4v-6c0-5-2-9-7-9z" fill="#d9a441" stroke="#8a5a14" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="16" cy="26.5" r="2.2" fill="#8a5a14"/>`),
   bussola: svg(`<circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M16 6l3.5 10H12.5z" fill="#ff6b6b"/><path d="M16 26l-3.5-10h7z" fill="currentColor"/>`),
 };
 

@@ -54,6 +54,8 @@ export interface SaveData {
     explored: string;
     /** Névoa do mapa da Ilha da Aurora. */
     exploredAurora?: string;
+    /** Névoa do mapa da Ilha do Eco. */
+    exploredEco?: string;
     nodes: Record<string, NodeSave>;
     /** Marcadores colocados pelo jogador no mapa (c = índice da cor). */
     pins?: Array<{ x: number; z: number; c: number }>;
@@ -166,6 +168,7 @@ export function validateSave(input: unknown): SaveData | null {
       regions: Array.isArray(world.regions) ? world.regions.filter((r): r is string => typeof r === 'string') : [],
       explored: typeof world.explored === 'string' ? world.explored : '',
       exploredAurora: typeof world.exploredAurora === 'string' ? world.exploredAurora : '',
+      ...(typeof world.exploredEco === 'string' && { exploredEco: world.exploredEco }),
       ...(Array.isArray(world.pins) && {
         pins: world.pins
             .filter((p): p is { x: number; z: number; c: number } => isObj(p) && isNum(p.x) && isNum(p.z) && isNum(p.c))

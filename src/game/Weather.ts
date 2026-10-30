@@ -88,6 +88,8 @@ export class WeatherSystem {
   mistNight = false;
   /** Intensidade atual da névoa da noite (0 a 1). */
   mist = 0;
+  /** Névoa de um lugar (a Ilha do Eco), de 0 a 1; não esconde o minimapa. */
+  zoneMist = 0;
   /** Chamado quando o clima muda (para avisos). */
   onChange: ((kind: WeatherKind) => void) | null = null;
   /** Chamado a cada relâmpago (o som do trovão vem com atraso). */
@@ -159,7 +161,7 @@ export class WeatherSystem {
 
   /** Quanto a névoa do cenário fecha (1 = normal), somando chuva e névoa da noite. */
   get fogMultiplier(): number {
-    return this.fogFactor * (1 - 0.7 * this.mist);
+    return this.fogFactor * (1 - 0.7 * this.mist) * (1 - 0.55 * this.zoneMist);
   }
 
   /** A névoa esconde o minimapa? */
@@ -229,7 +231,8 @@ export class WeatherSystem {
       v.sun.intensity *= 1 - c * (0.65 + storm * 0.15);
       v.hemi.intensity *= 1 - c * (0.25 + storm * 0.2);
     }
-    if (this.mist > 0.001) v.fog.color.lerp(MIST, this.mist * 0.6);
+    const mist = Math.max(this.mist, this.zoneMist);
+    if (mist > 0.001) v.fog.color.lerp(MIST, mist * 0.6);
     if (this.flash > 0) {
       v.hemi.intensity += this.flash * 2.5;
       v.sky.horizonColor.value.lerp(new THREE.Color('#e8eeff'), this.flash * 0.6);

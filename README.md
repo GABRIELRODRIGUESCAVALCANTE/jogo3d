@@ -101,11 +101,15 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
 - Inventário visual, comida que restaura energia e o bônus "Bem alimentado".
 - Fabricação: corda, machado, picareta, tocha, vara de pesca e comidas assadas (com estações: bancada e fogueira).
 - Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, baú, canteiro, peças modulares, cerca, caminho e lanterna.
+- **Ilha do Eco** (capítulo 3): uma terceira ilha ao sul, escondida na névoa (também montada sob
+  demanda). Lá estão o acampamento da **capitã Iara**, com quem dá para conversar, três **sinos antigos**
+  (cada um com uma nota) e o **Templo do Eco**, onde a **Guardiã dos Lumeni** pede que você cante a
+  canção na ordem certa. Ao conseguir, a névoa se abre e um feixe de luz sobe do templo.
 - **Personagens e diário**: o papagaio **Pipoca** mora perto dos destroços e conversa com você (com
   escolhas): conta a história da capitã Iara, dá dicas da missão atual e, em troca de uma fruta, marca
-  um tesouro no seu mapa. **8 páginas do diário de Iara** estão espalhadas pelas ilhas; as lidas ficam
+  um tesouro no seu mapa. **10 páginas do diário de Iara** estão espalhadas pelas ilhas; as lidas ficam
   no menu Missões (J) para reler.
-- 28 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 9 opcionais, com recompensas e finais.
+- 32 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4), capítulo 3 na Ilha do Eco (4) e 9 opcionais, com recompensas e finais.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
 - **Marcadores do jogador**: toque no mapa para colocar alfinetes coloridos (até 24); eles aparecem no
@@ -199,11 +203,12 @@ por exemplo, a `resource:gathered` sem alterar o inventário.
 
 Cada ilha é uma `IslandShape` em `src/game/world/islands.ts`: centro, tamanho, resolução e a
 função de altura. O `TerrainSet` responde a altura do chão em qualquer ponto do mundo, perguntando
-à ilha certa. A ilha principal é montada no carregamento; a Ilha da Aurora só é criada quando o
-jogador chega a ~340 m dela, e a malha aparece um *chunk* por quadro (`Terrain.buildNextChunk`).
-Para adicionar uma terceira ilha: crie outra `IslandShape`, inclua em `ISLAND_SHAPES`, adicione
-uma grade de exploração em `WorldState`, uma faixa densa na água (`Water.ts`) e o conteúdo
-(recursos, marcos e missões), seguindo o exemplo da Aurora.
+à ilha certa. A ilha principal é montada no carregamento; a Ilha da Aurora e a Ilha do Eco só são
+criadas quando o jogador chega a ~330 m delas, e a malha aparece um *chunk* por quadro
+(`Terrain.buildNextChunk`). A Ilha do Eco foi feita assim: uma `IslandShape` nova em
+`ISLAND_SHAPES`, uma grade de exploração em `WorldState`, uma faixa densa na água (`Water.ts`),
+recursos (`ResourceNodes.generate('eco')`), marcos (`world/EcoLandmarks.ts`), conversas
+(`data/dialogues.ts`) e missões. Uma quarta ilha seguiria o mesmo caminho.
 
 ---
 

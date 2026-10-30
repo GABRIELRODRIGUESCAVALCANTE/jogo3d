@@ -7,7 +7,7 @@ import type { ItemBundle, ItemId } from './items';
 import type { RegionId } from './regions';
 import type { StructureId } from './structures';
 import { PLACES, type Place } from '../world/layout';
-import { AURORA_PLACES } from '../world/islands';
+import { AURORA_PLACES, ECO_PLACES } from '../world/islands';
 
 export type ObjectiveDef =
   | { type: 'collect'; item: ItemId; amount: number }
@@ -326,6 +326,48 @@ export const QUESTS: QuestDef[] = [
     rewards: { xp: 250 },
     target: AURORA_PLACES.observatory,
     completeText: 'O céu da Aurora se enche de luz. Os Lumeni deixaram um caminho entre as estrelas...',
+  },
+  // ----- Capítulo 3: a Ilha do Eco -----
+  {
+    id: 'q_eco',
+    title: 'Rumo à Névoa',
+    description:
+      'O Mapa de Estrelas aponta para uma terceira ilha, ao sul da ilha principal, escondida na névoa. Pergunte ao Pipoca para onde a capitã Iara foi e navegue até lá.',
+    objectives: [{ type: 'visit', region: 'eco' }],
+    requires: ['q_observatorio'],
+    rewards: { xp: 120 },
+    target: ECO_PLACES.beach,
+  },
+  {
+    id: 'q_iara',
+    title: 'A Capitã Perdida',
+    description: 'Há fumaça de fogueira perto da praia do Eco. Será a capitã Iara?',
+    objectives: [{ type: 'interact', target: 'iara_encontrada', label: 'Encontre a capitã Iara' }],
+    requires: ['q_eco'],
+    rewards: { xp: 80 },
+    target: ECO_PLACES.camp,
+  },
+  {
+    id: 'q_sinos',
+    title: 'Os Três Sinos',
+    description: 'Toque os três sinos antigos da Ilha do Eco e preste atenção na nota de cada um.',
+    objectives: [
+      { type: 'interact', target: 'sino_oeste', label: 'Toque o Sino do Oeste' },
+      { type: 'interact', target: 'sino_sul', label: 'Toque o Sino do Sul' },
+      { type: 'interact', target: 'sino_leste', label: 'Toque o Sino do Leste' },
+    ],
+    requires: ['q_iara'],
+    rewards: { xp: 120 },
+  },
+  {
+    id: 'q_cancao',
+    title: 'A Canção dos Lumeni',
+    description: 'A Guardiã do Eco despertou no templo. Cante com ela a Canção dos Lumeni para dissipar a névoa.',
+    objectives: [{ type: 'interact', target: 'eco_cancao', label: 'Cante a canção com a Guardiã' }],
+    requires: ['q_sinos'],
+    rewards: { xp: 250, items: { cristal: 5 } },
+    target: ECO_PLACES.temple,
+    completeText: 'A névoa se abre e as três ilhas brilham juntas no céu: a constelação dos Lumeni está completa.',
   },
 ];
 

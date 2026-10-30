@@ -59,6 +59,11 @@ export class MapRenderer {
     this.renderBase(terrain);
   }
 
+  /** Ilha que este mapa mostra. */
+  get island(): ExploreGrid['island'] {
+    return this.grid.island;
+  }
+
   /** O ponto está dentro da área deste mapa? */
   covers(x: number, z: number): boolean {
     return x >= this.minX && z >= this.minZ && x < this.minX + this.size && z < this.minZ + this.size;

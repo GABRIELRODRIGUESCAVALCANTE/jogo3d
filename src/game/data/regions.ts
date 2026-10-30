@@ -3,9 +3,9 @@
  * "descoberta": aparece no mapa e o jogador ganha experiência.
  */
 import { PLACES } from '../world/layout';
-import { AURORA_CENTER, AURORA_PLACES } from '../world/islands';
+import { AURORA_CENTER, AURORA_PLACES, ECO_CENTER, ECO_PLACES } from '../world/islands';
 
-export type RegionId = 'praia' | 'floresta' | 'clareira' | 'ruinas' | 'montanhas' | 'caverna' | 'pico' | 'aurora' | 'observatorio';
+export type RegionId = 'praia' | 'floresta' | 'clareira' | 'ruinas' | 'montanhas' | 'caverna' | 'pico' | 'aurora' | 'observatorio' | 'eco' | 'templo_eco';
 
 export interface RegionDef {
   id: RegionId;
@@ -18,6 +18,14 @@ export interface RegionDef {
 
 /** Ordenadas da menor para a maior: regiões pequenas têm prioridade. */
 export const REGIONS: RegionDef[] = [
+  {
+    id: 'templo_eco',
+    name: 'Templo do Eco',
+    description: 'Um anel de pedras no alto da Ilha do Eco, onde a névoa canta.',
+    x: ECO_PLACES.temple.x,
+    z: ECO_PLACES.temple.z,
+    radius: 14,
+  },
   {
     id: 'caverna',
     name: 'Caverna de Cristal',
@@ -81,6 +89,14 @@ export const REGIONS: RegionDef[] = [
     x: AURORA_CENTER.x,
     z: AURORA_CENTER.z,
     radius: 135,
+  },
+  {
+    id: 'eco',
+    name: 'Ilha do Eco',
+    description: 'A ilha escondida na névoa ao sul, a última do Mapa de Estrelas dos Lumeni.',
+    x: ECO_CENTER.x,
+    z: ECO_CENTER.z,
+    radius: 125,
   },
   {
     id: 'floresta',

@@ -14,11 +14,12 @@ import { FishingSystem } from './Fishing';
 import { FireflyThieves } from './Fireflies';
 import { PetSystem } from './Pet';
 import { runDialogue } from './Dialogue';
-import { PARROT, type DialogueContext } from './data/dialogues';
+import { GUARDIAN, IARA, PARROT, type DialogueContext, type EcoDialogueContext } from './data/dialogues';
 import { DIARY_PAGES, diaryCount, type DiaryPage } from './data/diary';
 import { StoryProps } from './world/StoryProps';
 import { BoatController } from './Boat';
-import { AURORA_CENTER } from './world/islands';
+import { AURORA_CENTER, ECO_CENTER, ECO_PLACES, ecoPathDistance } from './world/islands';
+import { BELLS, LUMENI_SONG, type BellDef } from './world/EcoLandmarks';
 import { WORLD_LIMIT_RADIUS, distanceToPaths } from './world/layout';
 import { AURORA_PLACES, auroraPathDistance } from './world/islands';
 import type { NodeSave } from './save/SaveData';
@@ -108,6 +109,8 @@ export class Game {
   building!: BuildingSystem;
   mapRenderer!: MapRenderer;
   auroraMap: MapRenderer | null = null;
+  ecoMap: MapRenderer | null = null;
+  ecoWildlife: Wildlife | null = null;
   ui!: UIManager;
 
   // --- Estado ---
@@ -151,6 +154,7 @@ export class Game {
     const islands = [
       { x: 0, z: 0, r: WORLD_LIMIT_RADIUS },
       { x: AURORA_CENTER.x, z: AURORA_CENTER.z, r: 132 },
+      { x: ECO_CENTER.x, z: ECO_CENTER.z, r: 122 },
     ];
     let nearest = islands[0];
     let bestGap = Infinity;
@@ -292,6 +296,15 @@ export class Game {
       this.auroraMap = new MapRenderer(this.world.terrain, this.worldState.grids.aurora, auroraPathDistance);
     };
     this.world.scene.add(this.fishing.group);
+    this.world.onEcoCreated = () => {
+      this.ecoWildlife = new Wildlife(this.world.terrain, this.collision, this.models, { x: ECO_CENTER.x, z: ECO_CENTER.z, scale: 0.65, seed: 7 });
+      this.ecoWildlife.onSplash = this.wildlife.onSplash;
+      this.ecoWildlife.build();
+      this.ecoWildlife.setDensity(this.settings.preset.decorationDensity);
+      this.world.scene.add(this.ecoWildlife.group);
+      this.world.ecoResources!.load(this.pendingNodes);
+      this.ecoMap = new MapRenderer(this.world.terrain, this.worldState.grids.eco, ecoPathDistance);
+    };
     this.fireflies = new FireflyThieves(this.player, this.world.terrain, this.lights, this.bus, {
       count: (item) => this.inventory.count(item),
       take: (item, amount) => this.inventory.remove(item, amount),
@@ -408,6 +421,7 @@ export class Game {
       const running = this.state === 'playing' && this.player.speed > 6.5;
       this.wildlife.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
       this.auroraWildlife?.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
+      this.ecoWildlife?.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
       this.lights.update(dt, focus, this.world.dayNight.night);
       this.audio.update(dt);
       if (this.state === 'playing') this.ui.update(dt);
@@ -482,8 +496,12 @@ export class Game {
       }
       for (const rm of this.world.resourceManagers) rm.update(dt, this.playTime, this.player.position);
       this.checkAurora();
+      this.checkEco();
       this.fishing.update(dt);
       this.fireflies.update(dt, this.world.dayNight.night, !this.boatCtl.active && !this.inCave);
+      // A Ilha do Eco vive coberta de névoa (até a Canção dos Lumeni).
+      const ecoDistance = Math.hypot(this.player.position.x - ECO_CENTER.x, this.player.position.z - ECO_CENTER.z);
+      this.world.weather.zoneMist = this.worldState.hasFlag('eco_cancao') ? 0 : 1 - smoothstep(150, 320, ecoDistance);
       this.wildlife.lure = !this.pet.tamed && this.player.speed < 6.5 && this.inventory.has('fruta');
       this.pet.update(dt);
       this.updateSurvival(dt);
@@ -721,6 +739,7 @@ export class Game {
       ui.notify.banner(q.title, 'Missão concluída!', 'missao', 'quest');
       if (q.completeText) ui.notify.toast(q.completeText, 'info', 'estrela');
       if (questId === 'q_observatorio') void this.showChapter2Ending();
+      if (questId === 'q_cancao') void this.showChapter3Ending();
       ui.hud.markQuestsDirty();
       ui.refresh('missoes');
       this.autosaveTimer = Math.min(this.autosaveTimer, 2);
@@ -975,6 +994,8 @@ export class Game {
     this.world.auroraDecorations?.setDensity(preset.decorationDensity);
     this.wildlife?.setDensity(preset.decorationDensity);
     this.auroraWildlife?.setDensity(preset.decorationDensity);
+    this.ecoWildlife?.setDensity(preset.decorationDensity);
+    this.world.ecoDecorations?.setDensity(preset.decorationDensity);
     this.lights.setCount(preset.maxPointLights);
     this.shadowBlob.visible = !preset.shadows;
     // Materiais precisam ser recompilados quando as sombras mudam.
@@ -1045,11 +1066,34 @@ export class Game {
     if (immediate) this.world.terrain.get('aurora').buildMeshes();
   }
 
+  /** Cria a Ilha do Eco quando o jogador chega perto (névoa e tudo). */
+  private checkEco(): void {
+    if (this.world.ecoCreated) return;
+    const p = this.player.position;
+    if (Math.hypot(p.x - ECO_CENTER.x, p.z - ECO_CENTER.z) < 330) {
+      this.createEco(false);
+      this.ui.notify.toast('Sinos ao longe… Uma ilha surge no meio da névoa: a Ilha do Eco!', 'quest', 'barco');
+    }
+  }
+
+  private createEco(immediate: boolean): void {
+    this.world.createEco(this.settings.preset.decorationDensity, {
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      setFlag: (f) => this.worldState.setFlag(f),
+      ringBell: (bell) => this.ringBell(bell),
+      talkToIara: () => void this.talkOnEco('iara'),
+      talkToGuardian: () => void this.talkOnEco('guardia'),
+    });
+    if (immediate) this.world.terrain.get('eco').buildMeshes();
+  }
+
   /** Estados dos recursos de todas as ilhas (os ainda não criados vêm do salvamento). */
   private saveNodes(): Record<string, NodeSave> {
     const out: Record<string, NodeSave> = {};
-    if (!this.world.auroraResources && this.pendingNodes) {
-      for (const [id, n] of Object.entries(this.pendingNodes)) if (id.startsWith('aurora:')) out[id] = n;
+    if (this.pendingNodes) {
+      for (const [id, n] of Object.entries(this.pendingNodes)) {
+        if ((!this.world.auroraResources && id.startsWith('aurora:')) || (!this.world.ecoResources && id.startsWith('eco:'))) out[id] = n;
+      }
     }
     for (const rm of this.world.resourceManagers) Object.assign(out, rm.toJSON());
     return out;
@@ -1163,6 +1207,7 @@ export class Game {
     this.world.dayNight.setTime(16.8);
     this.world.weather.set('limpo', undefined, true);
     this.world.weather.setMist(false, true);
+    this.world.weather.zoneMist = 0;
     this.audio.setRain(0, false);
     this.world.questBeacon.visible = false;
     this.world.targetMarker.visible = false;
@@ -1318,6 +1363,7 @@ export class Game {
     this.building.clear();
     for (const rm of this.world.resourceManagers) rm.load(undefined);
     this.world.auroraLandmarks?.applyFlags();
+    this.world.ecoLandmarks?.applyFlags();
     if (this.boatCtl.active) {
       this.boatCtl.boat!.boarded = false;
       this.boatCtl.boat = null;
@@ -1357,6 +1403,7 @@ export class Game {
       regions: data.world.regions,
       explored: data.world.explored,
       exploredAurora: data.world.exploredAurora,
+      exploredEco: data.world.exploredEco,
     });
     this.inventory.load(data.inventory, data.durability);
     this.progression.load(data.progression);
@@ -1365,10 +1412,13 @@ export class Game {
     if (nearAurora(data.player.x, data.player.z) || data.structures.some((st) => nearAurora(st.x, st.z))) {
       this.createAurora(true);
     }
+    const nearEco = (x: number, z: number) => Math.hypot(x - ECO_CENTER.x, z - ECO_CENTER.z) < 340;
+    if (nearEco(data.player.x, data.player.z) || data.structures.some((st) => nearEco(st.x, st.z))) this.createEco(true);
     this.building.load(data.structures);
     this.pendingNodes = data.world.nodes;
     for (const rm of this.world.resourceManagers) rm.load(data.world.nodes);
     this.world.auroraLandmarks?.applyFlags();
+    this.world.ecoLandmarks?.applyFlags();
     this.world.landmarks.applyFlags();
     this.quests.load(data.quests);
     this.quests.evaluateAll();
@@ -1423,6 +1473,7 @@ export class Game {
         regions: [...this.worldState.discovered],
         explored: this.worldState.exploredToBase64('principal'),
         exploredAurora: this.worldState.exploredToBase64('aurora'),
+        exploredEco: this.worldState.exploredToBase64('eco'),
         nodes: this.saveNodes(),
         weather: this.world.weather.toJSON(),
         pins: this.pins.map((p) => ({ ...p })),
@@ -1553,8 +1604,20 @@ export class Game {
   /** Mapa da ilha em que o jogador está (ou da mais próxima). */
   get currentMap(): MapRenderer {
     const p = this.player.position;
-    if (this.auroraMap && Math.hypot(p.x - AURORA_CENTER.x, p.z - AURORA_CENTER.z) < Math.hypot(p.x, p.z)) return this.auroraMap;
-    return this.mapRenderer;
+    const options: Array<[MapRenderer | null, number]> = [
+      [this.mapRenderer, Math.hypot(p.x, p.z)],
+      [this.auroraMap, Math.hypot(p.x - AURORA_CENTER.x, p.z - AURORA_CENTER.z)],
+      [this.ecoMap, Math.hypot(p.x - ECO_CENTER.x, p.z - ECO_CENTER.z)],
+    ];
+    let best = this.mapRenderer;
+    let bestD = Infinity;
+    for (const [map, d] of options) {
+      if (map && d < bestD) {
+        best = map;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   /** Objetivo da missão acompanhada (para o feixe de luz e o mapa). */
@@ -1566,6 +1629,48 @@ export class Game {
   // ===========================================================================
   // História: diário de Iara e conversas
   // ===========================================================================
+
+  /** Toca um sino do Eco: nota musical, aviso da altura e marcador da missão. */
+  private ringBell(bell: BellDef): void {
+    this.audio.playBell(bell.freq);
+    const first = !this.worldState.hasFlag(`sino_${bell.id}`);
+    this.worldState.setFlag(`sino_${bell.id}`);
+    if (first) {
+      this.progression.addXP(20);
+      const rung = BELLS.filter((b) => this.worldState.hasFlag(`sino_${b.id}`)).length;
+      this.ui.notify.toast(
+        `O ${bell.name} soa ${bell.pitch === 'média' ? 'numa nota média' : `numa nota ${bell.pitch}`}. (${rung}/3 sinos)` +
+          (rung === 3 ? ' Algo desperta no templo!' : ''),
+        rung === 3 ? 'quest' : 'info',
+        'sino',
+      );
+    } else {
+      this.ui.notify.toast(`O ${bell.name}: nota ${bell.pitch}.`, 'info', 'sino');
+    }
+  }
+
+  private async talkOnEco(who: 'iara' | 'guardia'): Promise<void> {
+    this.audio.play('open');
+    const ctx: EcoDialogueContext = {
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      setFlag: (f) => this.worldState.setFlag(f),
+      bellsRung: () => BELLS.filter((b) => this.worldState.hasFlag(`sino_${b.id}`)).length,
+      song: [],
+      playNote: (id) => {
+        const bell = BELLS.find((b) => b.id === id);
+        if (bell) this.audio.playBell(bell.freq);
+        this.world.ecoLandmarks?.swingBell(bell?.id ?? 'sul');
+      },
+      songCorrect: () => ctx.song.length === LUMENI_SONG.length && ctx.song.every((n, i) => n === LUMENI_SONG[i]),
+    };
+    await runDialogue(who === 'iara' ? IARA : GUARDIAN, ctx, (opts) => this.ui.dialogs.choose(opts));
+    // Só depois da despedida da guardiã: a missão conclui e o final do capítulo aparece.
+    if (who === 'guardia' && ctx.songCorrect() && !this.worldState.hasFlag('eco_cancao')) {
+      this.worldState.setFlag('eco_cancao');
+      this.world.ecoLandmarks?.applyFlags();
+      this.audio.play('portal');
+    }
+  }
 
   private async readDiaryPage(page: DiaryPage): Promise<void> {
     const first = !this.worldState.hasFlag(page.id);
@@ -1680,6 +1785,10 @@ export class Game {
       AURORA_PLACES.pylonWest,
       AURORA_PLACES.pylonEast,
       AURORA_PLACES.pylonSouth,
+      ECO_PLACES.temple,
+      ECO_PLACES.bellWest,
+      ECO_PLACES.bellEast,
+      ECO_PLACES.bellSouth,
     ];
     for (const l of landmarks) if (ws.isExplored(l.x, l.z)) markers.push({ x: l.x, z: l.z, type: 'landmark' });
     for (const pos of this.closedChests()) {
@@ -1794,6 +1903,27 @@ export class Game {
     this.ui.notify.toast('Você descansou: energia restaurada. (À noite, a cama permite dormir até o amanhecer.)', 'success', 'raio');
   }
 
+  private async showChapter3Ending(): Promise<void> {
+    await this.ui.dialogs.custom(
+      `
+      <div class="ending">
+        <div class="welcome-icon">${icon('estrela')}</div>
+        <h2>Fim do Capítulo 3: O Eco das Estrelas</h2>
+        <p>Você encontrou a capitã Iara, tocou os sinos antigos e cantou a Canção dos Lumeni. A névoa se abriu e as três ilhas brilham juntas no céu: a constelação dos Lumeni está completa.</p>
+        <p>Iara vai voltar para casa — e o Pipoca, finalmente, vai rever a sua capitã.</p>
+        <div class="pause-stats">
+          <div><span>Nível</span><b>${this.progression.level}</b></div>
+          <div><span>Dias</span><b>${this.world.dayNight.day}</b></div>
+          <div><span>Missões</span><b>${this.quests.completed.size}/${this.quests.totalQuests}</b></div>
+          <div><span>Páginas do diário</span><b>${diaryCount((f) => this.worldState.hasFlag(f))}/${DIARY_PAGES.length}</b></div>
+        </div>
+        <p class="muted">O mundo continua aberto: termine as missões opcionais, decore sua casa e explore as três ilhas.</p>
+      </div>`,
+      'Continuar explorando',
+    );
+    await this.saveGame(false);
+  }
+
   private async showChapter2Ending(): Promise<void> {
     await this.ui.dialogs.custom(
       `
@@ -1807,7 +1937,7 @@ export class Game {
           <div><span>Missões</span><b>${this.quests.completed.size}/${this.quests.totalQuests}</b></div>
           <div><span>Construções</span><b>${this.stats.built}</b></div>
         </div>
-        <p class="muted">Novas ilhas no mapa de estrelas dos Lumeni chegarão em futuras atualizações.</p>
+        <p class="muted">O Mapa de Estrelas ainda guarda uma terceira ilha, ao sul, escondida na névoa… Pergunte ao Pipoca!</p>
       </div>`,
       'Continuar explorando',
     );

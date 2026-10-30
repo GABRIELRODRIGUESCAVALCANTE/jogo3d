@@ -198,6 +198,16 @@ export class AudioManager {
   }
 
   /** Volume da chuva (0 a 1). Abrigado, o som fica abafado. */
+  /** Toca uma nota de sino (frequência em Hz), com harmônicos e um eco. */
+  playBell(freq: number): void {
+    if (!this.ctx) return;
+    this.tone(freq, 2.4, { gain: 0.2, type: 'sine' });
+    this.tone(freq * 2.76, 1.2, { gain: 0.06, type: 'sine' });
+    this.tone(freq * 5.4, 0.6, { gain: 0.03, type: 'sine' });
+    // O eco: a mesma nota, mais baixa, um pouco depois.
+    this.tone(freq, 1.6, { gain: 0.07, type: 'sine', delay: 0.45 });
+  }
+
   setRain(intensity: number, sheltered: boolean): void {
     if (!this.ctx) return;
     this.rainLevel.gain.setTargetAtTime(intensity * (sheltered ? 0.12 : 0.3), this.ctx.currentTime, 0.5);

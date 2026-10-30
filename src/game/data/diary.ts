@@ -4,7 +4,7 @@
  */
 import type { Place } from '../world/layout';
 import { PLACES } from '../world/layout';
-import { AURORA_PLACES } from '../world/islands';
+import { AURORA_PLACES, ECO_PLACES } from '../world/islands';
 import type { LoreEntry } from './lore';
 
 export interface DiaryPage extends LoreEntry {
@@ -95,6 +95,26 @@ export const DIARY_PAGES: DiaryPage[] = [
     paragraphs: [
       '"No observatório encontrei o Mapa de Estrelas dos Lumeni. Três ilhas formam uma constelação: a do Farol, a da Aurora… e uma terceira, ao sul, escondida na névoa."',
       '"Eles a chamavam de Ilha do Eco. É para lá que eu vou. Se você chegou até aqui, siga as estrelas."',
+    ],
+  },
+  {
+    id: 'diario_9',
+    number: 9,
+    place: at(ECO_PLACES.beach, -6, 14),
+    title: 'Diário de Iara — página 9',
+    paragraphs: [
+      '"Ilha do Eco. A névoa é tão grossa que só achei a praia seguindo o som das ondas. Aqui, tudo responde: grito o meu nome e a ilha grita de volta."',
+      '"Montei acampamento perto da praia. Há sinos antigos espalhados pelos morros."',
+    ],
+  },
+  {
+    id: 'diario_10',
+    number: 10,
+    place: at(ECO_PLACES.temple, 4, -11),
+    title: 'Diário de Iara — página 10',
+    paragraphs: [
+      '"Nas pedras do templo está gravada a Canção dos Lumeni: do mais grave ao mais agudo, como o sol que sobe do mar."',
+      '"Toquei os sinos, mas a guardiã não acordou para mim. Talvez ela espere alguém que tenha atravessado as três ilhas."',
     ],
   },
 ];

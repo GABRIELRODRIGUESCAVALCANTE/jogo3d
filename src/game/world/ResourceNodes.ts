@@ -25,7 +25,7 @@ import {
 } from '../models/props';
 import type { NodeSave } from '../save/SaveData';
 import type { HeightField, IslandId } from './Terrain';
-import { AURORA_CENTER, AURORA_KEEP_CLEAR, AURORA_PLACES, auroraPathDistance } from './islands';
+import { AURORA_CENTER, AURORA_KEEP_CLEAR, AURORA_PLACES, ECO_CENTER, ECO_KEEP_CLEAR, auroraPathDistance, ecoPathDistance } from './islands';
 import { PLACES, WORLD_SEED, distanceToPaths, type Place } from './layout';
 
 export interface ResourceNode {
@@ -110,12 +110,13 @@ export class ResourceManager implements InteractableProvider {
   /** Espalha os recursos de uma ilha (cada ilha tem seu próprio gerenciador). */
   generate(island: IslandId = 'principal'): void {
     const aurora = island === 'aurora';
-    this.idPrefix = aurora ? 'aurora:' : '';
-    const center = aurora ? AURORA_CENTER : { x: 0, z: 0 };
-    const extent = aurora ? 125 : 165;
-    const keepClear = aurora ? AURORA_KEEP_CLEAR : KEEP_CLEAR;
-    const pathDistance = aurora ? auroraPathDistance : distanceToPaths;
-    const random = createRandom(WORLD_SEED + (aurora ? 41 : 1));
+    const eco = island === 'eco';
+    this.idPrefix = aurora ? 'aurora:' : eco ? 'eco:' : '';
+    const center = aurora ? AURORA_CENTER : eco ? ECO_CENTER : { x: 0, z: 0 };
+    const extent = aurora ? 125 : eco ? 112 : 165;
+    const keepClear = aurora ? AURORA_KEEP_CLEAR : eco ? ECO_KEEP_CLEAR : KEEP_CLEAR;
+    const pathDistance = aurora ? auroraPathDistance : eco ? ecoPathDistance : distanceToPaths;
+    const random = createRandom(WORLD_SEED + (aurora ? 41 : eco ? 77 : 1));
     const placed: Array<{ x: number; z: number; r: number }> = [];
 
     const tooClose = (x: number, z: number, spacing: number) => {
@@ -158,6 +159,18 @@ export class ResourceManager implements InteractableProvider {
         this.addNode(kind, i % variants, x, z, random() * Math.PI * 2, scale);
       });
     };
+
+    if (eco) {
+      // Eco: mata fechada e úmida, muitas pedras e frutas; poucos cristais.
+      scatter('palmeira', 16, { minH: 0.35, maxH: 2.3, maxSlope: 0.5, spacing: 6, pathClear: 2 }, 3, [0.85, 1.2]);
+      scatter('arvore', 64, { minH: 2, maxH: 18, maxSlope: 0.65, spacing: 4.4, pathClear: 3.2 }, 3, [0.9, 1.5]);
+      scatter('rocha', 40, { minH: 0.6, maxH: 30, maxSlope: 1.2, spacing: 4, pathClear: 2 }, 3, [0.6, 1.4]);
+      scatter('arbusto', 26, { minH: 2, maxH: 14, maxSlope: 0.6, spacing: 4, pathClear: 2 }, 1, [0.85, 1.2]);
+      scatter('capim', 36, { minH: 1.3, maxH: 12, maxSlope: 0.7, spacing: 3, pathClear: 1.5 }, 1, [0.85, 1.25]);
+      scatter('cristal', 5, { minH: 8, maxH: 30, maxSlope: 0.8, spacing: 10, pathClear: 2 }, 1, [0.8, 1.1]);
+      this.buildMeshes();
+      return;
+    }
 
     if (aurora) {
       // Aurora: floresta azulada, muitos cristais perto dos pilares.

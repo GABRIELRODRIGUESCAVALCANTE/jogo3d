@@ -17,11 +17,11 @@ export class Water {
   private readonly uniforms = { uTime: { value: 0 }, uWave: { value: 1 } };
 
   constructor(getHeight: (x: number, z: number) => number) {
-    // Grade com faixas: vértices densos (~4,5 m) perto das duas ilhas, onde a
+    // Grade com faixas: vértices densos (~4,5 m) perto das três ilhas, onde a
     // cor muda com a profundidade, e espaçados no mar aberto (coberto pela névoa).
     const xs = bands([
-      [-950, -200, 6],
-      [-200, 200, 90],
+      [-950, -300, 5],
+      [-300, 200, 112],
       [200, 410, 10],
       [410, 710, 70],
       [710, 1000, 6],
@@ -29,7 +29,9 @@ export class Water {
     const zs = bands([
       [-950, -410, 8],
       [-410, 200, 136],
-      [200, 950, 12],
+      [200, 380, 8],
+      [380, 660, 62],
+      [660, 950, 5],
     ]);
     const vertices = new Float32Array(xs.length * zs.length * 3);
     let v = 0;
