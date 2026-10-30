@@ -69,6 +69,7 @@ npx playwright install chromium
 - Ícones no topo: inventário, fabricação, construção, mapa, missões e pausa.
 
 O tipo de controle é detectado automaticamente e pode ser trocado em **Opções → Tipo de controle**.
+As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Opções → Teclado**.
 
 ---
 
@@ -99,6 +100,8 @@ O tipo de controle é detectado automaticamente e pode ser trocado em **Opções
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
 - Ciclo de dia e noite (sol, lua, estrelas), luzes de fogueiras, lanternas e tocha; dormir na cabana pula a noite.
 - Salvamento automático (a cada minuto, ao concluir missões, ao construir e ao sair da aba), salvamento manual, carregamento e opção de **apagar o salvamento com confirmação**.
+- **Três espaços de salvamento**, com **exportar** (baixa um arquivo `.json`) e **importar** — para guardar uma cópia ou continuar em outro aparelho.
+- **Acessibilidade**: teclas configuráveis (Opções → Teclado), tamanho da interface, cores para daltonismo (azul/laranja) e "reduzir movimento" (sem tremor de câmera e com menos animações).
 - Áudio sintetizado (efeitos, ondas, vento, pássaros, grilos e música suave), com volumes separados.
 - Opções de qualidade gráfica (Baixa/Média/Alta), sensibilidade, inversão do eixo e duração do dia.
 - Tratamento de redimensionamento, perda do contexto WebGL, navegador sem WebGL 2 e falhas de carregamento.
@@ -233,13 +236,18 @@ Depois é só compartilhar o link. No celular, o navegador permite "Adicionar à
 
 ---
 
-## Gerar um APK Android com Capacitor (futuro)
+## Gerar um APK Android
 
-O projeto já está preparado (`base: './'` e `capacitor.config.json`). Passo a passo:
+### Pelo GitHub (sem instalar nada)
 
-```bash
-npm install @capacitor/core @capacitor/cli @capacitor/android
-```
+O workflow `.github/workflows/android.yml` gera um APK de teste. No GitHub, abra
+**Actions → APK Android → Run workflow** (ou crie uma tag como `v1.0.0`). Ao terminar,
+baixe o arquivo em **Artifacts → alem-do-horizonte-apk**, copie para o celular e instale
+(o Android pede para permitir "fontes desconhecidas"). O APK já vem na horizontal e com o ícone do jogo.
+
+### No seu computador (Capacitor)
+
+O Capacitor já está nas dependências do projeto. Requer Android Studio e JDK 21:
 
 ```bash
 npm run build
