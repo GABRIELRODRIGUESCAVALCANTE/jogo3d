@@ -4,6 +4,7 @@
  */
 import type { Game } from '../../game/Game';
 import { ITEMS, type ItemId } from '../../game/data/items';
+import { DIARY_PAGES } from '../../game/data/diary';
 import { escapeHtml } from '../dom';
 import { icon } from '../icons';
 import type { UIManager } from '../UIManager';
@@ -13,6 +14,12 @@ export class QuestPanel extends Panel {
   constructor(ui: UIManager, game: Game) {
     super(ui, game, 'missoes', 'Missões', 'missao', 'wide');
     this.body.addEventListener('click', (e) => {
+      const page = (e.target as HTMLElement).closest<HTMLElement>('[data-diary]');
+      if (page) {
+        const entry = DIARY_PAGES.find((p) => p.id === page.dataset.diary);
+        if (entry) void this.ui.dialogs.lore(entry);
+        return;
+      }
       const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-track]');
       if (btn) {
         this.game.quests.track(btn.dataset.track!);
@@ -62,9 +69,18 @@ export class QuestPanel extends Panel {
       .map((q) => `<li>${icon('check')}<span>${escapeHtml(q!.title)}</span></li>`)
       .join('');
 
+    const ws = this.game.worldState;
+    const pages = DIARY_PAGES.filter((p) => ws.hasFlag(p.id));
+    const diary = pages.length
+      ? `<details class="completed diary"><summary>${icon('diario')} Diário de Iara (${pages.length}/${DIARY_PAGES.length} páginas)</summary><ul>${pages
+          .map((p) => `<li><button class="btn btn-small btn-ghost" data-diary="${p.id}">${icon('diario')}<span>Página ${p.number}</span></button></li>`)
+          .join('')}</ul></details>`
+      : '';
+
     this.body.innerHTML = `
       <div class="quest-summary">${icon('estrela')} Concluídas: <b>${qs.completed.size}/${qs.totalQuests}</b></div>
       <div class="quest-list">${active || '<p class="muted">Nenhuma missão ativa no momento. Continue explorando!</p>'}</div>
+      ${diary}
       ${done ? `<details class="completed"><summary>Missões concluídas (${qs.completed.size})</summary><ul>${done}</ul></details>` : ''}`;
   }
 }

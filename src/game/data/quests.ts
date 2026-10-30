@@ -126,6 +126,16 @@ export const QUESTS: QuestDef[] = [
     target: { x: 0, z: 140 },
   },
   {
+    id: 'q_diario',
+    title: 'Páginas ao Vento',
+    description:
+      'Um papagaio falante mora perto dos destroços. Converse com ele e procure as páginas do diário da capitã Iara, espalhadas pela ilha.',
+    objectives: [{ type: 'interact', target: 'diario_5', label: 'Encontre 5 páginas do diário de Iara' }],
+    requires: ['q_madeira'],
+    rewards: { xp: 100, items: { corda: 2 } },
+    target: { x: 21, z: 129 },
+  },
+  {
     id: 'q_cozinha',
     title: 'Chef da Ilha',
     description:

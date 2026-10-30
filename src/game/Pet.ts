@@ -179,9 +179,7 @@ export class PetSystem implements InteractableProvider {
         this.tameInteractable.position.set(f.x, this.terrain.getHeight(f.x, f.z) + 0.5, f.z);
         out.push(this.tameInteractable);
       }
-      return;
-    }
-    if (this.root && this.position.distanceTo(this.player.position) < 3 && !this.hooks.boatSeat()) {
+    } else if (this.root && this.position.distanceTo(this.player.position) < 3 && !this.hooks.boatSeat()) {
       this.petInteractable.position.copy(this.position).setY(this.position.y + 0.4);
       out.push(this.petInteractable);
     }
@@ -271,6 +269,29 @@ export class PetSystem implements InteractableProvider {
       this.animator = new Animator(model.root, model.clips);
       this.animator.play('Survey', 0);
     });
+  }
+
+  /**
+   * Revela um tesouro sem a raposa (dica do papagaio): o montinho aparece e
+   * fica marcado para sempre. Devolve o tesouro revelado (ou null se não houver).
+   */
+  revealNext(): Treasure | null {
+    const p = this.player.position;
+    const hidden = this.treasures
+      .filter((t) => !this.hooks.hasFlag(`${t.id}_cavado`) && !this.hooks.hasFlag(`${t.id}_revelado`))
+      .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+    const t = hidden[0];
+    if (!t) return null;
+    this.hooks.setFlag(`${t.id}_revelado`);
+    this.showMound(t);
+    return t;
+  }
+
+  /** Mostra de novo os montinhos revelados (ao carregar um jogo). */
+  applyFlags(): void {
+    for (const t of this.treasures) {
+      if (this.hooks.hasFlag(`${t.id}_revelado`) && !this.hooks.hasFlag(`${t.id}_cavado`)) this.showMound(t);
+    }
   }
 
   /** Mostra os montinhos de terra dos tesouros achados e não escavados. */
@@ -407,6 +428,7 @@ export class PetSystem implements InteractableProvider {
   load(data: PetSave | undefined, tameProgress: number): void {
     this.reset();
     this.tameProgress = tameProgress;
+    this.applyFlags();
     if (!this.tamed) return;
     const x = data?.x ?? this.player.position.x + 2;
     const z = data?.z ?? this.player.position.z + 2;

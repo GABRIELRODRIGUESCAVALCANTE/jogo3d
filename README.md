@@ -101,7 +101,11 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
 - Inventário visual, comida que restaura energia e o bônus "Bem alimentado".
 - Fabricação: corda, machado, picareta, tocha, vara de pesca e comidas assadas (com estações: bancada e fogueira).
 - Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, baú, canteiro, peças modulares, cerca, caminho e lanterna.
-- 27 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 8 opcionais, com recompensas e finais.
+- **Personagens e diário**: o papagaio **Pipoca** mora perto dos destroços e conversa com você (com
+  escolhas): conta a história da capitã Iara, dá dicas da missão atual e, em troca de uma fruta, marca
+  um tesouro no seu mapa. **8 páginas do diário de Iara** estão espalhadas pelas ilhas; as lidas ficam
+  no menu Missões (J) para reler.
+- 28 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 9 opcionais, com recompensas e finais.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
 - **Marcadores do jogador**: toque no mapa para colocar alfinetes coloridos (até 24); eles aparecem no

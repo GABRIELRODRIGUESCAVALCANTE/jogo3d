@@ -253,6 +253,17 @@ export const ICONS: Record<string, string> = {
   tempestade: svg(`<path d="M9 18a5.5 5.5 0 0 1-.6-11A7.5 7.5 0 0 1 22.6 5.5 6 6 0 0 1 23 18z" fill="#7d8794" stroke="#4a525e" stroke-width="1.5" stroke-linejoin="round"/><path d="M17 17l-4 7h4l-2 6 6-8h-4l2-5z" fill="#ffd166" stroke="#c99a2e" stroke-width="1" stroke-linejoin="round"/><path d="M9 22l-1.2 3.5M25 21l-1.2 3.5" stroke="#6fb7ff" stroke-width="2" stroke-linecap="round"/>`),
   fogueira_apagada: svg(`<path d="M7 26l18-5M7 21l18 5" stroke="#6b4a2f" stroke-width="3" stroke-linecap="round"/><path d="M14 17c-2-3 1-5 0-9M19 16c-1-2 1-4 0-6" stroke="#9aa4ae" stroke-width="2" stroke-linecap="round" fill="none"/>`),
   raposa: svg(`<path d="M6 6l5 7h10l5-7-1 11c0 6-4 10-9 10s-9-4-9-10z" fill="#e8743b"/><path d="M11 20c1.5 3 3 4 5 4s3.5-1 5-4c-2 1-3.5 1.5-5 1.5S13 21 11 20z" fill="#fff4e6"/><circle cx="12.5" cy="17" r="1.4" fill="#2b2b2b"/><circle cx="19.5" cy="17" r="1.4" fill="#2b2b2b"/><circle cx="16" cy="23" r="1.3" fill="#2b2b2b"/>`),
+  papagaio: svg(`
+    <path d="M12 30l2-7M17 30l-1-7" stroke="#5a4630" stroke-width="1.6" stroke-linecap="round"/>
+    <ellipse cx="15" cy="17" rx="7" ry="9" fill="#3fbf4a"/>
+    <path d="M10 15c-3 4-3 9 1 13l3-9z" fill="#2f8fdc"/>
+    <circle cx="17" cy="9" r="6" fill="#e63946"/>
+    <path d="M22 8c4 0 5 3 4 6-1-2-3-2-4-1z" fill="#ffd166"/>
+    <circle cx="19" cy="8" r="1.8" fill="#fff"/><circle cx="19.5" cy="8" r="0.9" fill="#111"/>`),
+  diario: svg(`
+    <path d="M4 7c4-2 8-2 12 1v19c-4-3-8-3-12-1z" fill="#f6ecd2" stroke="#7a3f2a" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M28 7c-4-2-8-2-12 1v19c4-3 8-3 12-1z" fill="#f1e6c8" stroke="#7a3f2a" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M7 12h6M7 16h6M19 12h6M19 16h6M19 20h4" stroke="#b9a27a" stroke-width="1.2"/>`),
   bussola: svg(`<circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M16 6l3.5 10H12.5z" fill="#ff6b6b"/><path d="M16 26l-3.5-10h7z" fill="currentColor"/>`),
 };
 

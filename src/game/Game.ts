@@ -13,6 +13,10 @@ import { BuildingSystem, type PlacedStructure } from './Building';
 import { FishingSystem } from './Fishing';
 import { FireflyThieves } from './Fireflies';
 import { PetSystem } from './Pet';
+import { runDialogue } from './Dialogue';
+import { PARROT, type DialogueContext } from './data/dialogues';
+import { DIARY_PAGES, diaryCount, type DiaryPage } from './data/diary';
+import { StoryProps } from './world/StoryProps';
 import { BoatController } from './Boat';
 import { AURORA_CENTER } from './world/islands';
 import { WORLD_LIMIT_RADIUS, distanceToPaths } from './world/layout';
@@ -96,6 +100,7 @@ export class Game {
   fishing!: FishingSystem;
   fireflies!: FireflyThieves;
   pet!: PetSystem;
+  story!: StoryProps;
   boatCtl!: BoatController;
   auroraWildlife: Wildlife | null = null;
   readonly player = new Player();
@@ -315,6 +320,12 @@ export class Game {
       },
     });
     this.world.scene.add(this.pet.group);
+    this.story = new StoryProps(this.world.terrain, this.collision, this.interaction, {
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      readPage: (page) => void this.readDiaryPage(page),
+      talkToParrot: () => void this.talkToParrot(),
+    });
+    this.world.scene.add(this.story.group);
     this.pinFlags.name = 'Marcadores do mapa';
     this.world.scene.add(this.pinFlags);
     this.interaction.addProvider(this.pet);
@@ -393,6 +404,7 @@ export class Game {
 
       this.world.update(dt, this.elapsed, focus, this.camera, simulate);
       this.particles.update(dt);
+      this.story?.update(dt, this.elapsed);
       const running = this.state === 'playing' && this.player.speed > 6.5;
       this.wildlife.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
       this.auroraWildlife?.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
@@ -1320,6 +1332,7 @@ export class Game {
     this.world.weather.setMist(false, true);
     this.fireflies?.reset();
     this.pet?.reset();
+    this.story?.applyFlags();
     this.setPins([]);
     this.wasNight = this.world.dayNight.isNight;
     this.thunders = [];
@@ -1378,6 +1391,7 @@ export class Game {
     this.player.buffTime = p.buffTime;
     this.player.hunger = clamp(p.hunger, 0, 100);
     this.pet.load(data.pet, data.pet?.tameProgress ?? 0);
+    this.story.applyFlags();
     this.setPins(data.world.pins ?? []);
   }
 
@@ -1547,6 +1561,53 @@ export class Game {
   questTarget(): { x: number; z: number } | null {
     const quest = this.quests.tracked;
     return quest?.target ?? null;
+  }
+
+  // ===========================================================================
+  // História: diário de Iara e conversas
+  // ===========================================================================
+
+  private async readDiaryPage(page: DiaryPage): Promise<void> {
+    const first = !this.worldState.hasFlag(page.id);
+    if (first) {
+      this.worldState.setFlag(page.id);
+      this.progression.addXP(10);
+      this.audio.play('discover');
+      const count = diaryCount((f) => this.worldState.hasFlag(f));
+      if (count >= 5) this.worldState.setFlag('diario_5');
+      if (count >= DIARY_PAGES.length) this.worldState.setFlag('diario_completo');
+    }
+    await this.ui.dialogs.lore(page);
+    if (first) {
+      const count = diaryCount((f) => this.worldState.hasFlag(f));
+      this.ui.notify.toast(`Página do diário encontrada (${count}/${DIARY_PAGES.length}). Releia no menu Missões (J).`, 'success', 'diario');
+    }
+  }
+
+  async talkToParrot(): Promise<void> {
+    this.audio.play('open');
+    const ctx: DialogueContext = {
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      setFlag: (f) => this.worldState.setFlag(f),
+      fruitCount: () => this.inventory.count('fruta'),
+      takeFruit: () => this.inventory.remove('fruta', 1),
+      questHint: () => {
+        const quest = this.quests.tracked;
+        if (!quest) return null;
+        const next = this.quests.objectives(quest).find((o) => !o.done);
+        return next ? `Na missão "${quest.title}", o próximo passo é: ${next.text}. ${quest.description}` : quest.description;
+      },
+      revealTreasure: () => {
+        const t = this.pet.revealNext();
+        if (!t) return null;
+        this.toggleMapPin(t.x, t.z, 3, 0);
+        return regionAt(t.x, t.z)?.name ?? (t.id.startsWith('tesouro_a') ? 'a Ilha da Aurora' : 'um canto escondido da ilha');
+      },
+      diaryCount: () => diaryCount((f) => this.worldState.hasFlag(f)),
+      diaryTotal: () => DIARY_PAGES.length,
+      sound: (name) => this.audio.play(name),
+    };
+    await runDialogue(PARROT, ctx, (opts) => this.ui.dialogs.choose(opts));
   }
 
   // ===========================================================================
