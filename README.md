@@ -89,6 +89,9 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
   a isca à noite (mais ainda na chuva) e vira o Dourado Grelhado.
 - **Baú de armazenamento** para guardar itens.
 - **Construção modular** em grade de 2 m: piso, paredes (lisa, com porta, com janela) e telhado de palha.
+  **Portas abrem e fecham**; a **escada** sobe um andar e um piso construído sobre as paredes vira o
+  **segundo andar** (embaixo dele, o andar de cima some para a câmera enxergar).
+- **Móveis e decoração**: mesa, cadeira, tapete trançado e vaso de flores, em qualquer andar.
 - **Barco a vela** (depois de acender o farol): construa na água rasa, embarque e navegue pelo mar.
 - **Ilha da Aurora** (capítulo 2): uma segunda ilha a nordeste, gerada **sob demanda** — o terreno é
   montado aos poucos (um pedaço por quadro) quando você se aproxima. Tem floresta azulada, três

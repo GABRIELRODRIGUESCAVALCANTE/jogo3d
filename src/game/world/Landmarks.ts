@@ -39,6 +39,8 @@ export interface CameraZone {
   maxDistance: number;
   /** Objetos escondidos enquanto o jogador está dentro (tetos). */
   hide?: THREE.Object3D[];
+  /** Só vale com o jogador abaixo desta altura (ex.: embaixo do segundo andar). */
+  below?: number;
 }
 
 interface ChestState {

@@ -267,9 +267,13 @@ export class Player {
     }
 
     // --- Integração ---
+    const prevY = pos.y;
     pos.x += this.velocity.x * dt;
     pos.z += this.velocity.z * dt;
     pos.y += this.velocity.y * dt;
+    // No chão, a gravidade de um quadro não deve baixar os pés antes das colisões:
+    // com o jogo lento (quadros longos), isso impediria subir degraus e escadas.
+    if (this.grounded && this.velocity.y <= 0) pos.y = Math.max(pos.y, prevY);
 
     // Limite do mundo: o oceano é grande demais para nadar (só de barco).
     if (env.clampToWorld?.(pos)) this.onBoundary?.();

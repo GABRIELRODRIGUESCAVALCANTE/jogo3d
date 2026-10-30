@@ -198,6 +198,24 @@ export const ICONS: Record<string, string> = {
     <path d="M16 4l9 15h-9z" fill="#f4ead2"/>
     <path d="M15 7l-8 12h8z" fill="#ffd9a0"/>
     <path d="M2 28c4-2 7 2 11 0s7 2 11 0 5 2 6 0" stroke="#3fb0e6" stroke-width="2" fill="none"/>`),
+  escada: svg(`
+    <path d="M5 27h6v-5h5v-5h5v-5h5V7h2v22H5z" fill="#c4925e" stroke="#7a5232" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M8 22L26 6" stroke="#7a5232" stroke-width="2" stroke-linecap="round"/>`),
+  mesa: svg(`
+    <rect x="4" y="11" width="24" height="4" rx="1" fill="#b98552"/>
+    <path d="M7 15v12M25 15v12M11 15v8M21 15v8" stroke="#7a5232" stroke-width="2.4" stroke-linecap="round"/>`),
+  cadeira: svg(`
+    <path d="M10 4v12h13" stroke="#9a6a3f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="9" y="15" width="15" height="3.5" rx="1" fill="#b98552"/>
+    <path d="M11 19v9M22 19v9" stroke="#7a5232" stroke-width="2.4" stroke-linecap="round"/>`),
+  tapete: svg(`
+    <path d="M3 21l13-7 13 7-13 7z" fill="#c9573c"/>
+    <path d="M8 21l8-4.3 8 4.3-8 4.3z" fill="#e9c46a"/>
+    <path d="M12 21l4-2 4 2-4 2z" fill="#2a9d8f"/>`),
+  vaso: svg(`
+    <path d="M10 18h12l-2 10h-8z" fill="#c06a3e"/>
+    <path d="M16 18V9M13 18l-3-7M19 18l3-6" stroke="#4caf50" stroke-width="1.6"/>
+    <circle cx="16" cy="8" r="2.6" fill="#ff6f91"/><circle cx="10" cy="10" r="2.2" fill="#ffd166"/><circle cx="22" cy="11" r="2.2" fill="#9b5de5"/>`),
   telhado: svg(`
     <path d="M2 20L16 7l14 13z" fill="#d9b45a"/>
     <path d="M6 17h20M10 13h12" stroke="#a8843a" stroke-width="1.6"/>

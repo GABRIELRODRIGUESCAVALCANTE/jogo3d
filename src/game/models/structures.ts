@@ -18,6 +18,10 @@ export interface StructureModel {
   plant?: THREE.Object3D;
   /** Batatas aparecendo quando a planta está pronta para colher. */
   crop?: THREE.Object3D;
+  /** Folha da porta (gira na dobradiça para abrir). */
+  door?: THREE.Object3D;
+  /** Base que desce até o chão (escondida no piso do segundo andar). */
+  foundation?: THREE.Object3D;
   /** Outras plantas da horta (milho, abacaxi): muda e colheita de cada uma. */
   variants?: Record<string, { plant: THREE.Object3D; crop: THREE.Object3D }>;
 }
@@ -74,7 +78,109 @@ export function createStructureModel(type: StructureId): StructureModel {
       return createRoofTile();
     case 'barco':
       return createBoat();
+    case 'escada':
+      return createStairs();
+    case 'mesa':
+      return createTable();
+    case 'cadeira':
+      return createChair();
+    case 'tapete':
+      return createRug();
+    case 'vaso':
+      return createVase();
   }
+}
+
+/** Degraus da escada (iguais aos da colisão em Building.ts). */
+export const STAIR_STEPS = 7;
+/** Altura que a escada sobe: um andar (parede + espessura do piso). */
+export const STAIR_RISE = WALL_H + 0.15;
+
+/** Escada de um andar: sobe ao longo de +Z, ocupando uma célula de 2×2 m. */
+function createStairs(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [];
+  const rise = STAIR_RISE / STAIR_STEPS;
+  const depth = 2 / STAIR_STEPS;
+  for (let i = 0; i < STAIR_STEPS; i++) {
+    const top = (i + 1) * rise;
+    parts.push(part(new THREE.BoxGeometry(1.5, 0.08, depth + 0.04), i % 2 ? WOOD_LIGHT : '#c4925e', { pos: [0, top - 0.04, -1 + depth * (i + 0.5)], seed: i }));
+    parts.push(part(new THREE.BoxGeometry(1.4, top - 0.08, 0.04), WOOD_DARK, { pos: [0, (top - 0.08) / 2, -1 + depth * i + 0.02] }));
+  }
+  // Vigas laterais inclinadas e corrimão.
+  const len = Math.hypot(2, STAIR_RISE);
+  const angle = Math.atan2(STAIR_RISE, 2);
+  for (const side of [-1, 1]) {
+    parts.push(part(new THREE.BoxGeometry(0.1, 0.3, len), WOOD_DARK, { rot: [-angle, 0, 0], pos: [side * 0.78, STAIR_RISE / 2 - 0.1, 0] }));
+    parts.push(part(new THREE.BoxGeometry(0.06, 0.06, len), WOOD, { rot: [-angle, 0, 0], pos: [side * 0.8, STAIR_RISE / 2 + 0.9, 0] }));
+    for (const k of [0.15, 0.55, 0.9]) {
+      const y = STAIR_RISE * k;
+      parts.push(part(new THREE.BoxGeometry(0.05, 0.95, 0.05), WOOD, { pos: [side * 0.8, y + 0.47, -1 + 2 * k] }));
+    }
+  }
+  root.add(mesh(merge(parts)));
+  return { root };
+}
+
+function createTable(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [part(new THREE.BoxGeometry(1.4, 0.08, 0.9), WOOD_LIGHT, { pos: [0, 0.78, 0] })];
+  for (const [x, z] of [
+    [-0.6, -0.35],
+    [0.6, -0.35],
+    [-0.6, 0.35],
+    [0.6, 0.35],
+  ]) {
+    parts.push(part(new THREE.BoxGeometry(0.08, 0.76, 0.08), WOOD_DARK, { pos: [x, 0.38, z] }));
+  }
+  parts.push(part(new THREE.CylinderGeometry(0.07, 0.06, 0.14, 7), '#e9dcc0', { pos: [0.3, 0.89, 0.1] }));
+  root.add(mesh(merge(parts)));
+  return { root };
+}
+
+function createChair(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [
+    part(new THREE.BoxGeometry(0.5, 0.06, 0.5), WOOD_LIGHT, { pos: [0, 0.45, 0] }),
+    part(new THREE.BoxGeometry(0.5, 0.5, 0.06), WOOD, { pos: [0, 0.72, -0.22] }),
+  ];
+  for (const [x, z] of [
+    [-0.2, -0.2],
+    [0.2, -0.2],
+    [-0.2, 0.2],
+    [0.2, 0.2],
+  ]) {
+    parts.push(part(new THREE.BoxGeometry(0.06, 0.44, 0.06), WOOD_DARK, { pos: [x, 0.22, z] }));
+  }
+  root.add(mesh(merge(parts)));
+  return { root };
+}
+
+function createRug(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [part(new THREE.BoxGeometry(1.8, 0.03, 1.2), '#c9573c', { pos: [0, 0.015, 0] })];
+  parts.push(part(new THREE.BoxGeometry(1.5, 0.035, 0.9), '#e9c46a', { pos: [0, 0.018, 0] }));
+  parts.push(part(new THREE.BoxGeometry(1.1, 0.04, 0.5), '#2a9d8f', { pos: [0, 0.02, 0] }));
+  root.add(mesh(merge(parts)));
+  return { root };
+}
+
+function createVase(): StructureModel {
+  const root = new THREE.Group();
+  const parts: THREE.BufferGeometry[] = [
+    part(new THREE.CylinderGeometry(0.16, 0.12, 0.4, 8), '#c06a3e', { pos: [0, 0.2, 0] }),
+    part(new THREE.CylinderGeometry(0.19, 0.16, 0.06, 8), '#a8552f', { pos: [0, 0.42, 0] }),
+  ];
+  const colors = ['#ff6f91', '#ffd166', '#f4f1de', '#9b5de5'];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const x = Math.cos(a) * 0.09;
+    const z = Math.sin(a) * 0.09;
+    parts.push(part(new THREE.CylinderGeometry(0.012, 0.012, 0.4, 4), '#4caf50', { pos: [x, 0.62, z], rot: [z * 2, 0, -x * 2] }));
+    parts.push(part(new THREE.IcosahedronGeometry(0.06, 0), colors[i % colors.length], { pos: [x * 1.8, 0.83, z * 1.8] }));
+  }
+  root.add(mesh(merge(parts)));
+  return { root };
 }
 
 /** Barco a vela: a proa aponta para +Z. A origem fica na linha d'água. */
@@ -232,13 +338,15 @@ function paintLeaf(geometry: THREE.BufferGeometry, seed: number): THREE.BufferGe
 function createFloor(): StructureModel {
   const root = new THREE.Group();
   const parts: THREE.BufferGeometry[] = [];
-  // Estrutura que desce até o chão (esconde desníveis) e tábuas por cima.
-  parts.push(part(new THREE.BoxGeometry(2, 1.4, 2), WOOD_DARK, { pos: [0, -0.62, 0] }));
+  // Tábuas por cima e uma estrutura que desce até o chão (esconde desníveis).
   for (let i = 0; i < 5; i++) {
     parts.push(part(new THREE.BoxGeometry(2, 0.1, 0.38), i % 2 ? WOOD_LIGHT : '#c4925e', { pos: [0, 0.1, -0.8 + i * 0.4], seed: i }));
   }
+  parts.push(part(new THREE.BoxGeometry(2, 0.12, 2), WOOD_DARK, { pos: [0, 0, 0] }));
   root.add(mesh(merge(parts)));
-  return { root };
+  const foundation = mesh(part(new THREE.BoxGeometry(2, 1.3, 2), WOOD_DARK, { pos: [0, -0.7, 0] }));
+  root.add(foundation);
+  return { root, foundation };
 }
 
 /** Parede modular de 2 m (centrada na origem, ao longo do eixo X). */
@@ -265,13 +373,25 @@ function createWall(kind: 'lisa' | 'porta' | 'janela'): StructureModel {
   // Postes nas pontas (escondem as emendas) e viga de base que desce até o chão.
   for (const side of [-1, 1]) parts.push(part(new THREE.BoxGeometry(0.22, WALL_H + 0.1, 0.32), WOOD_DARK, { pos: [side * 1, WALL_H / 2, 0] }));
   parts.push(part(new THREE.BoxGeometry(2.1, 1.0, 0.3), STONE, { pos: [0, -0.5, 0], variation: 0.08 }));
-  if (kind === 'porta') parts.push(part(new THREE.BoxGeometry(1.2, 0.14, 0.32), WOOD_DARK, { pos: [0, 2.2, 0] }));
+  let door: THREE.Object3D | undefined;
+  if (kind === 'porta') {
+    parts.push(part(new THREE.BoxGeometry(1.2, 0.14, 0.32), WOOD_DARK, { pos: [0, 2.2, 0] }));
+    // Folha da porta presa na dobradiça (lado esquerdo do vão).
+    const leaf: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 4; i++) leaf.push(part(new THREE.BoxGeometry(0.24, 2.08, 0.07), i % 2 ? WOOD : WOOD_LIGHT, { pos: [0.13 + i * 0.245, 1.04, 0], seed: i }));
+    leaf.push(part(new THREE.BoxGeometry(0.96, 0.1, 0.1), WOOD_DARK, { pos: [0.49, 0.5, 0] }));
+    leaf.push(part(new THREE.BoxGeometry(0.96, 0.1, 0.1), WOOD_DARK, { pos: [0.49, 1.6, 0] }));
+    leaf.push(part(new THREE.SphereGeometry(0.04, 6, 4), '#d9b24c', { pos: [0.85, 1.05, 0.07] }));
+    door = mesh(merge(leaf));
+    door.position.set(-0.5, 0, 0);
+  }
   if (kind === 'janela') {
     parts.push(part(new THREE.BoxGeometry(1.0, 0.08, 0.36), WOOD_LIGHT, { pos: [0, 0.86, 0] }));
     parts.push(part(new THREE.BoxGeometry(0.06, 0.86, 0.06), WOOD_DARK, { pos: [0, 1.3, 0] }));
   }
   root.add(mesh(merge(parts)));
-  return { root };
+  if (door) root.add(door);
+  return { root, door };
 }
 
 function createRoofTile(): StructureModel {

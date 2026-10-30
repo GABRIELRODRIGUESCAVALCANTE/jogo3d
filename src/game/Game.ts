@@ -613,6 +613,7 @@ export class Game {
     const toHide = new Set<THREE.Object3D>();
     this.inCave = false;
     for (const zone of [...this.world.landmarks.cameraZones, ...this.building.cameraZones]) {
+      if (zone.below !== undefined && p.y >= zone.below) continue;
       if (Math.hypot(p.x - zone.x, p.z - zone.z) < zone.radius) {
         limit = Math.min(limit, zone.maxDistance);
         for (const o of zone.hide ?? []) toHide.add(o);
