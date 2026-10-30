@@ -166,26 +166,27 @@ export function validateSave(input: unknown): SaveData | null {
       regions: Array.isArray(world.regions) ? world.regions.filter((r): r is string => typeof r === 'string') : [],
       explored: typeof world.explored === 'string' ? world.explored : '',
       exploredAurora: typeof world.exploredAurora === 'string' ? world.exploredAurora : '',
-      pins: Array.isArray(world.pins)
-        ? world.pins
+      ...(Array.isArray(world.pins) && {
+        pins: world.pins
             .filter((p): p is { x: number; z: number; c: number } => isObj(p) && isNum(p.x) && isNum(p.z) && isNum(p.c))
             .slice(0, MAX_PINS)
-            .map((p) => ({ x: p.x, z: p.z, c: Math.max(0, Math.min(3, Math.floor(p.c))) }))
-        : [],
-      weather:
-        isObj(world.weather) && typeof world.weather.kind === 'string' && isNum(world.weather.timer)
-          ? { kind: world.weather.kind, timer: world.weather.timer, ...(world.weather.mist === true ? { mist: true } : {}) }
-          : undefined,
+            .map((p) => ({ x: p.x, z: p.z, c: Math.max(0, Math.min(3, Math.floor(p.c))) })),
+      }),
+      ...(isObj(world.weather) &&
+        typeof world.weather.kind === 'string' &&
+        isNum(world.weather.timer) && {
+          weather: { kind: world.weather.kind, timer: world.weather.timer, ...(world.weather.mist === true ? { mist: true } : {}) },
+        }),
       nodes,
     },
-    pet: isObj(data.pet)
-      ? {
-          x: isNum(data.pet.x) ? data.pet.x : undefined,
-          z: isNum(data.pet.z) ? data.pet.z : undefined,
-          stay: data.pet.stay === true,
-          tameProgress: isNum(data.pet.tameProgress) ? Math.max(0, Math.floor(data.pet.tameProgress)) : 0,
-        }
-      : undefined,
+    ...(isObj(data.pet) && {
+      pet: {
+        ...(isNum(data.pet.x) && { x: data.pet.x }),
+        ...(isNum(data.pet.z) && { z: data.pet.z }),
+        stay: data.pet.stay === true,
+        tameProgress: isNum(data.pet.tameProgress) ? Math.max(0, Math.floor(data.pet.tameProgress)) : 0,
+      },
+    }),
     stats: {
       gathered: isNum(stats.gathered) ? stats.gathered : 0,
       crafted: isNum(stats.crafted) ? stats.crafted : 0,
