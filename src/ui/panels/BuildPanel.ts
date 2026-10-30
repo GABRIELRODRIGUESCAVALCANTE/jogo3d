@@ -30,6 +30,7 @@ export class BuildPanel extends Panel {
     const groups: Array<[StructureDef['group'], string]> = [
       ['basico', 'Essenciais'],
       ['modular', 'Casa modular (encaixa numa grade de 2 m)'],
+      ['moveis', 'Móveis e decoração da casa'],
       ['decoracao', 'Decoração'],
     ];
     const card = (id: StructureId) => {

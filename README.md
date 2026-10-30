@@ -83,9 +83,15 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
 - **Fome (saciedade)**: diminui com o tempo; com fome a energia volta devagar, faminto ela não volta.
 - **Durabilidade das ferramentas** (machado, picareta, vara de pesca e a tocha, que queima enquanto acesa).
 - **Pesca** com minijogo (lançar, esperar a boia afundar e puxar na hora certa) perto dos cardumes.
-- **Horta**: sementes do capim alto, canteiro, crescimento em tempo de jogo e colheita de batatas-doces.
+- **Horta**: canteiro com **batata-doce**, **milho** (sementes raras no capim) e **abacaxi** (mudas que
+  caem dos arbustos de frutas); com mais de um tipo de semente, o jogo pergunta o que plantar.
+- **Cozinha**: milho assado, salada tropical, ensopado da ilha e o raro **Peixe Dourado**, que só morde
+  a isca à noite (mais ainda na chuva) e vira o Dourado Grelhado.
 - **Baú de armazenamento** para guardar itens.
 - **Construção modular** em grade de 2 m: piso, paredes (lisa, com porta, com janela) e telhado de palha.
+  **Portas abrem e fecham**; a **escada** sobe um andar e um piso construído sobre as paredes vira o
+  **segundo andar** (embaixo dele, o andar de cima some para a câmera enxergar).
+- **Móveis e decoração**: mesa, cadeira, tapete trançado e vaso de flores, em qualquer andar.
 - **Barco a vela** (depois de acender o farol): construa na água rasa, embarque e navegue pelo mar.
 - **Ilha da Aurora** (capítulo 2): uma segunda ilha a nordeste, gerada **sob demanda** — o terreno é
   montado aos poucos (um pedaço por quadro) quando você se aproxima. Tem floresta azulada, três
@@ -95,10 +101,31 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
 - Inventário visual, comida que restaura energia e o bônus "Bem alimentado".
 - Fabricação: corda, machado, picareta, tocha, vara de pesca e comidas assadas (com estações: bancada e fogueira).
 - Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, baú, canteiro, peças modulares, cerca, caminho e lanterna.
-- 22 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 3 opcionais, com recompensas e finais.
+- **Ilha do Eco** (capítulo 3): uma terceira ilha ao sul, escondida na névoa (também montada sob
+  demanda). Lá estão o acampamento da **capitã Iara**, com quem dá para conversar, três **sinos antigos**
+  (cada um com uma nota) e o **Templo do Eco**, onde a **Guardiã dos Lumeni** pede que você cante a
+  canção na ordem certa. Ao conseguir, a névoa se abre e um feixe de luz sobe do templo.
+- **Personagens e diário**: o papagaio **Pipoca** mora perto dos destroços e conversa com você (com
+  escolhas): conta a história da capitã Iara, dá dicas da missão atual e, em troca de uma fruta, marca
+  um tesouro no seu mapa. **10 páginas do diário de Iara** estão espalhadas pelas ilhas; as lidas ficam
+  no menu Missões (J) para reler.
+- 32 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4), capítulo 3 na Ilha do Eco (4) e 9 opcionais, com recompensas e finais.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
+- **Marcadores do jogador**: toque no mapa para colocar alfinetes coloridos (até 24); eles aparecem no
+  minimapa e como bandeirinhas no mundo, e são salvos.
 - Ciclo de dia e noite (sol, lua, estrelas), luzes de fogueiras, lanternas e tocha; dormir na cabana pula a noite.
+- **Clima**: céu limpo, nublado, chuva e tempestade (com relâmpagos e trovões), que mudam sozinhos.
+  A chuva **apaga fogueiras ao relento** (as que estão sob um telhado ou dentro da cabana continuam acesas;
+  reacenda com 1 madeira quando parar), deixa o **mar agitado** (o barco balança, fica mais lento e, na
+  tempestade, é empurrado pelo vento) e, sem abrigo, dá fome mais rápido e cansa mais.
+- **Noite com risco leve** (sem combate): **vagalumes ladrões** aparecem às vezes e levam frutas da
+  bolsa se chegarem perto — a **tocha acesa os espanta**, e um abrigo protege. Algumas noites têm
+  **névoa densa**, que fecha a visão e **esconde o minimapa** (e a sua posição no mapa) até o amanhecer.
+- **Raposa de estimação**: ande devagar com frutas e as raposas ficam curiosas; dê 3 frutas a uma e
+  ela vira a **Brasa**, que segue você (até no barco), espera quando você pede e **fareja tesouros
+  enterrados** (8 na ilha principal e 4 na Aurora) e baús ainda fechados. Ela cava no lugar e o
+  tesouro aparece no mapa até ser escavado.
 - Salvamento automático (a cada minuto, ao concluir missões, ao construir e ao sair da aba), salvamento manual, carregamento e opção de **apagar o salvamento com confirmação**.
 - **Três espaços de salvamento**, com **exportar** (baixa um arquivo `.json`) e **importar** — para guardar uma cópia ou continuar em outro aparelho.
 - **Acessibilidade**: teclas configuráveis (Opções → Teclado), tamanho da interface, cores para daltonismo (azul/laranja) e "reduzir movimento" (sem tremor de câmera e com menos animações).
@@ -176,11 +203,12 @@ por exemplo, a `resource:gathered` sem alterar o inventário.
 
 Cada ilha é uma `IslandShape` em `src/game/world/islands.ts`: centro, tamanho, resolução e a
 função de altura. O `TerrainSet` responde a altura do chão em qualquer ponto do mundo, perguntando
-à ilha certa. A ilha principal é montada no carregamento; a Ilha da Aurora só é criada quando o
-jogador chega a ~340 m dela, e a malha aparece um *chunk* por quadro (`Terrain.buildNextChunk`).
-Para adicionar uma terceira ilha: crie outra `IslandShape`, inclua em `ISLAND_SHAPES`, adicione
-uma grade de exploração em `WorldState`, uma faixa densa na água (`Water.ts`) e o conteúdo
-(recursos, marcos e missões), seguindo o exemplo da Aurora.
+à ilha certa. A ilha principal é montada no carregamento; a Ilha da Aurora e a Ilha do Eco só são
+criadas quando o jogador chega a ~330 m delas, e a malha aparece um *chunk* por quadro
+(`Terrain.buildNextChunk`). A Ilha do Eco foi feita assim: uma `IslandShape` nova em
+`ISLAND_SHAPES`, uma grade de exploração em `WorldState`, uma faixa densa na água (`Water.ts`),
+recursos (`ResourceNodes.generate('eco')`), marcos (`world/EcoLandmarks.ts`), conversas
+(`data/dialogues.ts`) e missões. Uma quarta ilha seguiria o mesmo caminho.
 
 ---
 

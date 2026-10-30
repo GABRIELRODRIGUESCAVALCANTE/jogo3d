@@ -7,7 +7,7 @@ import type { ItemBundle, ItemId } from './items';
 import type { RegionId } from './regions';
 import type { StructureId } from './structures';
 import { PLACES, type Place } from '../world/layout';
-import { AURORA_PLACES } from '../world/islands';
+import { AURORA_PLACES, ECO_PLACES } from '../world/islands';
 
 export type ObjectiveDef =
   | { type: 'collect'; item: ItemId; amount: number }
@@ -124,6 +124,64 @@ export const QUESTS: QuestDef[] = [
     requires: ['q_ferramentas'],
     rewards: { xp: 70, items: { corda: 1 } },
     target: { x: 0, z: 140 },
+  },
+  {
+    id: 'q_diario',
+    title: 'Páginas ao Vento',
+    description:
+      'Um papagaio falante mora perto dos destroços. Converse com ele e procure as páginas do diário da capitã Iara, espalhadas pela ilha.',
+    objectives: [{ type: 'interact', target: 'diario_5', label: 'Encontre 5 páginas do diário de Iara' }],
+    requires: ['q_madeira'],
+    rewards: { xp: 100, items: { corda: 2 } },
+    target: { x: 21, z: 129 },
+  },
+  {
+    id: 'q_cozinha',
+    title: 'Chef da Ilha',
+    description:
+      'Plante milho (as sementes são raras no capim) e abacaxi (as mudas caem dos arbustos de frutas). Depois prepare uma Salada Tropical e um Ensopado da Ilha.',
+    objectives: [
+      { type: 'craft', item: 'salada_tropical', amount: 1 },
+      { type: 'craft', item: 'ensopado', amount: 1 },
+    ],
+    requires: ['q_horta'],
+    rewards: { xp: 120, items: { semente_milho: 1, muda_abacaxi: 1 } },
+  },
+  {
+    id: 'q_dourado',
+    title: 'Brilho na Água Escura',
+    description: 'Dizem que um peixe dourado morde a isca só à noite. Pesque um (na chuva, a sorte é maior).',
+    objectives: [{ type: 'collect', item: 'peixe_dourado', amount: 1 }],
+    requires: ['q_pesca'],
+    rewards: { xp: 80 },
+  },
+  {
+    id: 'q_vagalumes',
+    title: 'Luz Contra os Ladrões',
+    description:
+      'À noite, vagalumes ladrões tentam levar suas frutas. Fabrique uma tocha e acenda-a (tecla T ou o botão da tocha) quando eles chegarem perto para espantá-los.',
+    objectives: [{ type: 'interact', target: 'vagalumes_espantados', label: 'Espante os vagalumes com a tocha' }],
+    requires: ['q_ferramentas'],
+    rewards: { xp: 50, items: { fruta: 3 } },
+    completeText: 'Os vagalumes aprenderam a lição: frutas, só com licença!',
+  },
+  {
+    id: 'q_raposa',
+    title: 'Uma Amiga Peluda',
+    description:
+      'As raposas da ilha fogem de quem corre, mas ficam curiosas com quem anda devagar levando frutas. Chegue perto de uma e ofereça 3 frutas.',
+    objectives: [{ type: 'interact', target: 'raposa_domesticada', label: 'Domestique uma raposa com frutas' }],
+    requires: ['q_madeira'],
+    rewards: { xp: 40 },
+    completeText: 'A Brasa agora vai aonde você for — e o faro dela é ótimo!',
+  },
+  {
+    id: 'q_tesouros',
+    title: 'Faro de Tesouro',
+    description: 'Explore a ilha com a Brasa. Quando ela farejar algo e cavar, chegue perto e escave o tesouro.',
+    objectives: [{ type: 'interact', target: 'tesouros_3', label: 'Escave 3 tesouros enterrados' }],
+    requires: ['q_raposa'],
+    rewards: { xp: 90, items: { cristal: 2 } },
   },
   {
     id: 'q_horta',
@@ -268,6 +326,48 @@ export const QUESTS: QuestDef[] = [
     rewards: { xp: 250 },
     target: AURORA_PLACES.observatory,
     completeText: 'O céu da Aurora se enche de luz. Os Lumeni deixaram um caminho entre as estrelas...',
+  },
+  // ----- Capítulo 3: a Ilha do Eco -----
+  {
+    id: 'q_eco',
+    title: 'Rumo à Névoa',
+    description:
+      'O Mapa de Estrelas aponta para uma terceira ilha, ao sul da ilha principal, escondida na névoa. Pergunte ao Pipoca para onde a capitã Iara foi e navegue até lá.',
+    objectives: [{ type: 'visit', region: 'eco' }],
+    requires: ['q_observatorio'],
+    rewards: { xp: 120 },
+    target: ECO_PLACES.beach,
+  },
+  {
+    id: 'q_iara',
+    title: 'A Capitã Perdida',
+    description: 'Há fumaça de fogueira perto da praia do Eco. Será a capitã Iara?',
+    objectives: [{ type: 'interact', target: 'iara_encontrada', label: 'Encontre a capitã Iara' }],
+    requires: ['q_eco'],
+    rewards: { xp: 80 },
+    target: ECO_PLACES.camp,
+  },
+  {
+    id: 'q_sinos',
+    title: 'Os Três Sinos',
+    description: 'Toque os três sinos antigos da Ilha do Eco e preste atenção na nota de cada um.',
+    objectives: [
+      { type: 'interact', target: 'sino_oeste', label: 'Toque o Sino do Oeste' },
+      { type: 'interact', target: 'sino_sul', label: 'Toque o Sino do Sul' },
+      { type: 'interact', target: 'sino_leste', label: 'Toque o Sino do Leste' },
+    ],
+    requires: ['q_iara'],
+    rewards: { xp: 120 },
+  },
+  {
+    id: 'q_cancao',
+    title: 'A Canção dos Lumeni',
+    description: 'A Guardiã do Eco despertou no templo. Cante com ela a Canção dos Lumeni para dissipar a névoa.',
+    objectives: [{ type: 'interact', target: 'eco_cancao', label: 'Cante a canção com a Guardiã' }],
+    requires: ['q_sinos'],
+    rewards: { xp: 250, items: { cristal: 5 } },
+    target: ECO_PLACES.temple,
+    completeText: 'A névoa se abre e as três ilhas brilham juntas no céu: a constelação dos Lumeni está completa.',
   },
 ];
 

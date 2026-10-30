@@ -34,7 +34,8 @@ export type SoundName =
   | 'rotate'
   | 'equip'
   | 'fall'
-  | 'break';
+  | 'break'
+  | 'thunder';
 
 /**
  * Sons gravados (arquivos em public/assets/sounds, licença CC0 — Kenney).
@@ -89,6 +90,7 @@ export class AudioManager {
   private noiseBuffer!: AudioBuffer;
   private waveLevel!: GainNode;
   private windLevel!: GainNode;
+  private rainLevel!: GainNode;
 
   private samples = new Map<SoundName, AudioBuffer[]>();
   private samplesRequested = false;
@@ -193,6 +195,22 @@ export class AudioManager {
     const t = this.ctx.currentTime;
     this.waveLevel.gain.setTargetAtTime(cave ? 0.02 : 0.05 + coast * 0.35, t, 0.8);
     this.windLevel.gain.setTargetAtTime(cave ? 0.015 : 0.02 + altitude * 0.18, t, 0.8);
+  }
+
+  /** Volume da chuva (0 a 1). Abrigado, o som fica abafado. */
+  /** Toca uma nota de sino (frequência em Hz), com harmônicos e um eco. */
+  playBell(freq: number): void {
+    if (!this.ctx) return;
+    this.tone(freq, 2.4, { gain: 0.2, type: 'sine' });
+    this.tone(freq * 2.76, 1.2, { gain: 0.06, type: 'sine' });
+    this.tone(freq * 5.4, 0.6, { gain: 0.03, type: 'sine' });
+    // O eco: a mesma nota, mais baixa, um pouco depois.
+    this.tone(freq, 1.6, { gain: 0.07, type: 'sine', delay: 0.45 });
+  }
+
+  setRain(intensity: number, sheltered: boolean): void {
+    if (!this.ctx) return;
+    this.rainLevel.gain.setTargetAtTime(intensity * (sheltered ? 0.12 : 0.3), this.ctx.currentTime, 0.5);
   }
 
   /** Chamado a cada quadro: agenda pássaros, grilos, gotas e música. */
@@ -324,6 +342,10 @@ export class AudioManager {
       case 'break':
         this.noiseBurst(0.25, { type: 'bandpass', freq: 1200, freqEnd: 400, q: 0.8, gain: 0.45 });
         break;
+      case 'thunder':
+        this.noiseBurst(2.6, { type: 'lowpass', freq: 380, freqEnd: 90, gain: 0.9, attack: 0.05 });
+        this.noiseBurst(1.2, { type: 'lowpass', freq: 900, freqEnd: 200, gain: 0.35, delay: 0.05 });
+        break;
       case 'splash':
         this.noiseBurst(0.35, { type: 'bandpass', freq: 1400, freqEnd: 500, q: 0.9, gain: 0.3 });
         break;
@@ -393,6 +415,18 @@ export class AudioManager {
     this.windLevel.gain.value = 0.03;
     wind.connect(windFilter).connect(this.windLevel).connect(this.ambient);
     wind.start(0, 1);
+
+    // Chuva: ruído agudo filtrado, volume controlado pelo clima.
+    const rain = ctx.createBufferSource();
+    rain.buffer = this.noiseBuffer;
+    rain.loop = true;
+    const rainFilter = ctx.createBiquadFilter();
+    rainFilter.type = 'highpass';
+    rainFilter.frequency.value = 1800;
+    this.rainLevel = ctx.createGain();
+    this.rainLevel.gain.value = 0;
+    rain.connect(rainFilter).connect(this.rainLevel).connect(this.ambient);
+    rain.start(0, 0.5);
   }
 
   private tone(freq: number, dur: number, opts: ToneOptions = {}): void {

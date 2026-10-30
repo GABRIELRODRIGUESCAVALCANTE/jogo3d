@@ -22,6 +22,8 @@ export interface NodeKindDef {
   requiresTool?: ItemId;
   /** Chance de ganhar um item extra a cada golpe. */
   bonus?: { item: ItemId; chance: number };
+  /** Segundo bônus, mais raro (sorteado só se o primeiro não sair). */
+  rareBonus?: { item: ItemId; chance: number };
   /** Segundos de jogo até o recurso renascer. */
   respawn: number;
   xp: number;
@@ -92,6 +94,7 @@ export const NODE_KINDS: Record<NodeKind, NodeKindDef> = {
     hits: 3,
     amount: 1,
     respawn: 150,
+    rareBonus: { item: 'muda_abacaxi', chance: 0.05 },
     xp: 1,
     sound: 'leaves',
     particleColor: '#ff5a4f',
@@ -105,6 +108,7 @@ export const NODE_KINDS: Record<NodeKind, NodeKindDef> = {
     amount: 1,
     toolBonus: { tool: 'machado', amount: 2 },
     bonus: { item: 'semente', chance: 0.18 },
+    rareBonus: { item: 'semente_milho', chance: 0.07 },
     respawn: 120,
     xp: 1,
     sound: 'leaves',

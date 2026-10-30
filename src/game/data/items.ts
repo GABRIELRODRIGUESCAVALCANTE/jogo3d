@@ -20,7 +20,16 @@ export type ItemId =
   | 'peixe_assado'
   | 'semente'
   | 'batata_doce'
-  | 'batata_assada';
+  | 'batata_assada'
+  | 'semente_milho'
+  | 'milho'
+  | 'milho_assado'
+  | 'muda_abacaxi'
+  | 'abacaxi'
+  | 'salada_tropical'
+  | 'ensopado'
+  | 'peixe_dourado'
+  | 'dourado_grelhado';
 
 export type ItemCategory = 'recurso' | 'material' | 'ferramenta' | 'comida' | 'especial';
 
@@ -179,6 +188,76 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     icon: 'batata_assada',
     food: { energy: 45, hunger: 45 },
   },
+  semente_milho: {
+    id: 'semente_milho',
+    name: 'Semente de Milho',
+    description: 'Grãos secos achados no capim (raros) ou em tesouros. Plante num canteiro.',
+    category: 'recurso',
+    icon: 'semente_milho',
+  },
+  milho: {
+    id: 'milho',
+    name: 'Milho',
+    description: 'Espiga colhida na horta. Assada na fogueira fica muito melhor.',
+    category: 'comida',
+    icon: 'milho',
+    food: { energy: 8, hunger: 12 },
+  },
+  milho_assado: {
+    id: 'milho_assado',
+    name: 'Milho Assado',
+    description: 'Espiga tostadinha na brasa.',
+    category: 'comida',
+    icon: 'milho_assado',
+    food: { energy: 30, hunger: 30 },
+  },
+  muda_abacaxi: {
+    id: 'muda_abacaxi',
+    name: 'Muda de Abacaxi',
+    description: 'A coroa de um abacaxi. Às vezes cai dos arbustos de frutas; plante num canteiro.',
+    category: 'recurso',
+    icon: 'muda_abacaxi',
+  },
+  abacaxi: {
+    id: 'abacaxi',
+    name: 'Abacaxi',
+    description: 'Doce e suculento. Demora a crescer, mas vale a pena.',
+    category: 'comida',
+    icon: 'abacaxi',
+    food: { energy: 25, hunger: 22 },
+  },
+  salada_tropical: {
+    id: 'salada_tropical',
+    name: 'Salada Tropical',
+    description: 'Frutas com abacaxi: refrescante, deixa você "Bem alimentado".',
+    category: 'comida',
+    icon: 'salada_tropical',
+    food: { energy: 45, hunger: 40, buffSeconds: 120 },
+  },
+  ensopado: {
+    id: 'ensopado',
+    name: 'Ensopado da Ilha',
+    description: 'Peixe, batata-doce e milho cozidos juntos. A refeição mais completa da ilha.',
+    category: 'comida',
+    icon: 'ensopado',
+    food: { energy: 90, hunger: 85, buffSeconds: 300 },
+  },
+  peixe_dourado: {
+    id: 'peixe_dourado',
+    name: 'Peixe Dourado',
+    description: 'Raro: só morde a isca à noite (e um pouco mais na chuva). Brilha como uma lanterna.',
+    category: 'comida',
+    icon: 'peixe_dourado',
+    food: { energy: 30, hunger: 25 },
+  },
+  dourado_grelhado: {
+    id: 'dourado_grelhado',
+    name: 'Dourado Grelhado',
+    description: 'Um banquete raro: energia cheia e "Bem alimentado" por muito tempo.',
+    category: 'comida',
+    icon: 'dourado_grelhado',
+    food: { energy: 150, hunger: 80, buffSeconds: 480 },
+  },
 };
 
 /** Ordem de exibição no inventário. */
@@ -196,6 +275,15 @@ export const ITEM_ORDER: ItemId[] = [
   'semente',
   'batata_doce',
   'batata_assada',
+  'semente_milho',
+  'milho',
+  'milho_assado',
+  'muda_abacaxi',
+  'abacaxi',
+  'salada_tropical',
+  'ensopado',
+  'peixe_dourado',
+  'dourado_grelhado',
   'machado',
   'picareta',
   'tocha',

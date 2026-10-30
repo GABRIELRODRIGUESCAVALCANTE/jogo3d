@@ -9,6 +9,7 @@ import { STRUCTURES } from '../game/data/structures';
 import { $, escapeHtml, html } from './dom';
 import { keyLabel, type BindableAction, type KeyBindings } from '../core/KeyBindings';
 import { icon } from './icons';
+import { WEATHER_NAMES } from '../game/Weather';
 import type { PanelId } from './UIManager';
 
 const MENU_BUTTONS: Array<{ panel: PanelId; icon: string; label: string; key: string; action?: BindableAction }> = [
@@ -32,6 +33,8 @@ export class HUD {
   private readonly buffEl: HTMLElement;
   private readonly clockEl: HTMLElement;
   private readonly clockIcon: HTMLElement;
+  private readonly weatherEl: HTMLElement;
+  private lastWeather = 'limpo';
   private readonly regionEl: HTMLElement;
   private readonly trackerEl: HTMLElement;
   private readonly resourcesEl: HTMLElement;
@@ -41,6 +44,7 @@ export class HUD {
   private readonly fpsEl: HTMLElement;
   private readonly saveEl: HTMLElement;
   private readonly minimap: HTMLCanvasElement;
+  private readonly minimapWrap: HTMLElement;
 
   private minimapTimer = 0;
   private slowTimer = 0;
@@ -75,9 +79,10 @@ export class HUD {
         </div>
         <nav class="hud-menu" aria-label="Menus">${menu}</nav>
         <div class="hud-right">
-          <div class="clock"><span class="clock-icon">${icon('sol')}</span><span class="clock-text">Dia 1 · 08:00</span></div>
+          <div class="clock"><span class="clock-icon">${icon('sol')}</span><span class="clock-text">Dia 1 · 08:00</span><span class="weather-icon hidden"></span></div>
           <div class="minimap-wrap" title="Abrir mapa (M)">
             <canvas class="minimap" width="168" height="168"></canvas>
+            <div class="minimap-fog">${icon('nuvem')}<span>Névoa</span></div>
           </div>
           <div class="region-name"></div>
           <div class="quest-tracker"></div>
@@ -101,6 +106,7 @@ export class HUD {
     this.buffEl = $(this.el, '.buff');
     this.clockEl = $(this.el, '.clock-text');
     this.clockIcon = $(this.el, '.clock-icon');
+    this.weatherEl = $(this.el, '.weather-icon');
     this.regionEl = $(this.el, '.region-name');
     this.trackerEl = $(this.el, '.quest-tracker');
     this.resourcesEl = $(this.el, '.hud-resources');
@@ -110,6 +116,7 @@ export class HUD {
     this.fpsEl = $(this.el, '.fps');
     this.saveEl = $(this.el, '.save-indicator');
     this.minimap = $(this.el, '.minimap');
+    this.minimapWrap = $(this.el, '.minimap-wrap');
 
     this.el.querySelectorAll<HTMLElement>('.hud-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -188,6 +195,14 @@ export class HUD {
         this.clockIcon.innerHTML = icon(night ? 'lua' : 'sol');
         this.lastNight = night;
       }
+      const weather = g.world.weather.kind;
+      if (weather !== this.lastWeather) {
+        this.lastWeather = weather;
+        this.weatherEl.classList.toggle('hidden', weather === 'limpo');
+        if (weather !== 'limpo') this.weatherEl.innerHTML = icon(weather === 'nublado' ? 'nuvem' : weather);
+        this.weatherEl.title = WEATHER_NAMES[weather];
+        this.weatherEl.setAttribute('aria-label', WEATHER_NAMES[weather]);
+      }
       this.regionEl.textContent = g.currentRegionName;
       this.regionEl.classList.toggle('hidden', !g.currentRegionName);
       if (p.buffTime > 0) {
@@ -217,7 +232,10 @@ export class HUD {
     this.minimapTimer -= dt;
     if (this.minimapTimer <= 0) {
       this.minimapTimer = 0.1;
-      g.currentMap.drawMinimap(this.minimap, g.worldState, g.mapView());
+      // Na névoa o minimapa fica encoberto.
+      const misty = g.world.weather.misty;
+      this.minimapWrap.classList.toggle('fogged', misty);
+      if (!misty) g.currentMap.drawMinimap(this.minimap, g.worldState, g.mapView());
     }
   }
 

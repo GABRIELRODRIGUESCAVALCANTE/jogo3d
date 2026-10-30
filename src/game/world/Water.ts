@@ -14,14 +14,14 @@ const FOAM = new THREE.Color('#e9fbff');
 
 export class Water {
   readonly mesh: THREE.Mesh;
-  private readonly uniforms = { uTime: { value: 0 } };
+  private readonly uniforms = { uTime: { value: 0 }, uWave: { value: 1 } };
 
   constructor(getHeight: (x: number, z: number) => number) {
-    // Grade com faixas: vértices densos (~4,5 m) perto das duas ilhas, onde a
+    // Grade com faixas: vértices densos (~4,5 m) perto das três ilhas, onde a
     // cor muda com a profundidade, e espaçados no mar aberto (coberto pela névoa).
     const xs = bands([
-      [-950, -200, 6],
-      [-200, 200, 90],
+      [-950, -300, 5],
+      [-300, 200, 112],
       [200, 410, 10],
       [410, 710, 70],
       [710, 1000, 6],
@@ -29,7 +29,9 @@ export class Water {
     const zs = bands([
       [-950, -410, 8],
       [-410, 200, 136],
-      [200, 950, 12],
+      [200, 380, 8],
+      [380, 660, 62],
+      [660, 950, 5],
     ]);
     const vertices = new Float32Array(xs.length * zs.length * 3);
     let v = 0;
@@ -83,15 +85,16 @@ export class Water {
     // Injeta ondas no shader padrão do Three.js.
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = this.uniforms.uTime;
+      shader.uniforms.uWave = this.uniforms.uWave;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uWave;')
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
           vec4 wPos = modelMatrix * vec4(position, 1.0);
-          transformed.y += sin(wPos.x * 0.16 + uTime * 1.1) * 0.12
+          transformed.y += (sin(wPos.x * 0.16 + uTime * 1.1) * 0.12
                          + cos(wPos.z * 0.13 + uTime * 0.9) * 0.1
-                         + sin((wPos.x + wPos.z) * 0.35 + uTime * 1.7) * 0.04;`,
+                         + sin((wPos.x + wPos.z) * 0.35 + uTime * 1.7) * 0.04) * uWave;`,
         );
     };
 
@@ -99,6 +102,11 @@ export class Water {
     this.mesh.position.y = WATER_LEVEL;
     this.mesh.name = 'Oceano';
     this.mesh.renderOrder = 1;
+  }
+
+  /** Altura das ondas (1 = normal; tempestade deixa o mar agitado). */
+  setWaves(amount: number): void {
+    this.uniforms.uWave.value = amount;
   }
 
   update(elapsed: number): void {

@@ -4,7 +4,7 @@
  */
 import type { GameEventBus } from './events';
 import { REGIONS, type RegionId } from './data/regions';
-import { AURORA_ISLAND, MAIN_ISLAND } from './world/islands';
+import { AURORA_ISLAND, ECO_ISLAND, MAIN_ISLAND } from './world/islands';
 import type { IslandId, IslandShape } from './world/Terrain';
 
 /** Resolução da grade de exploração da ilha principal (células por lado). */
@@ -30,6 +30,7 @@ export class WorldState {
   readonly grids: Record<IslandId, ExploreGrid> = {
     principal: grid(MAIN_ISLAND, EXPLORE_RES),
     aurora: grid(AURORA_ISLAND, 70),
+    eco: grid(ECO_ISLAND, 64),
   };
   /** Incrementado sempre que a névoa muda (para o mapa redesenhar). */
   exploredVersion = 0;
@@ -152,7 +153,7 @@ export class WorldState {
     this.exploredVersion++;
   }
 
-  load(data: { flags?: string[]; regions?: string[]; explored?: string; exploredAurora?: string }): void {
+  load(data: { flags?: string[]; regions?: string[]; explored?: string; exploredAurora?: string; exploredEco?: string }): void {
     this.flags.clear();
     for (const f of data.flags ?? []) this.flags.add(f);
     this.discovered.clear();
@@ -160,5 +161,6 @@ export class WorldState {
     for (const r of data.regions ?? []) if (valid.has(r as RegionId)) this.discovered.add(r as RegionId);
     this.exploredFromBase64(data.explored, 'principal');
     this.exploredFromBase64(data.exploredAurora, 'aurora');
+    this.exploredFromBase64(data.exploredEco, 'eco');
   }
 }

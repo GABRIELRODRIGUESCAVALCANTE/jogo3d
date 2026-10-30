@@ -11,8 +11,15 @@ import { clamp, smoothstep } from '../core/math';
 import { DAY_LENGTH_SECONDS, QUALITY_PRESETS, Settings } from '../core/Settings';
 import { BuildingSystem, type PlacedStructure } from './Building';
 import { FishingSystem } from './Fishing';
+import { FireflyThieves } from './Fireflies';
+import { PetSystem } from './Pet';
+import { runDialogue } from './Dialogue';
+import { GUARDIAN, IARA, PARROT, type DialogueContext, type EcoDialogueContext } from './data/dialogues';
+import { DIARY_PAGES, diaryCount, type DiaryPage } from './data/diary';
+import { StoryProps } from './world/StoryProps';
 import { BoatController } from './Boat';
-import { AURORA_CENTER } from './world/islands';
+import { AURORA_CENTER, ECO_CENTER, ECO_PLACES, ecoPathDistance } from './world/islands';
+import { BELLS, LUMENI_SONG, type BellDef } from './world/EcoLandmarks';
 import { WORLD_LIMIT_RADIUS, distanceToPaths } from './world/layout';
 import { AURORA_PLACES, auroraPathDistance } from './world/islands';
 import type { NodeSave } from './save/SaveData';
@@ -20,6 +27,7 @@ import { CameraController } from './CameraController';
 import { CollisionWorld } from './Collision';
 import { CraftingSystem } from './Crafting';
 import { ITEMS, type ItemBundle, type ItemId } from './data/items';
+import { CROPS, isCropId, type CropId } from './data/crops';
 import { LORE } from './data/lore';
 import { getRecipe, RECIPES } from './data/recipes';
 import { getRegion, regionAt } from './data/regions';
@@ -32,16 +40,17 @@ import { Particles } from './Particles';
 import { Player } from './Player';
 import { Progression } from './Progression';
 import { QuestSystem } from './Quests';
-import { SAVE_VERSION, type SaveData } from './save/SaveData';
+import { MAX_PINS, SAVE_VERSION, type SaveData } from './save/SaveData';
 import { LocalStorageProvider } from './save/StorageProvider';
 import { SaveSystem } from './SaveSystem';
 import { World } from './World';
 import { WorldState } from './WorldState';
+import { type WeatherKind, WEATHER_NAMES } from './Weather';
 import { PLACES } from './world/layout';
 import { Wildlife } from './world/Wildlife';
 import { ModelLibrary } from './models/ModelLibrary';
 import type { MapMarker, MapView } from '../ui/MapRenderer';
-import { MapRenderer } from '../ui/MapRenderer';
+import { MapRenderer, PIN_COLORS } from '../ui/MapRenderer';
 import { UIManager } from '../ui/UIManager';
 import { nextFrame } from '../ui/dom';
 import { icon } from '../ui/icons';
@@ -49,6 +58,18 @@ import { icon } from '../ui/icons';
 export type GameState = 'loading' | 'menu' | 'playing';
 
 const AUTOSAVE_SECONDS = 60;
+/** Chance de uma noite ter névoa densa. */
+const MIST_CHANCE = 0.35;
+
+const PIN_POLE = new THREE.CylinderGeometry(0.06, 0.06, 4, 5);
+const PIN_POLE_MAT = new THREE.MeshLambertMaterial({ color: '#6b4a2f' });
+const PIN_CLOTH = new THREE.BoxGeometry(0.9, 0.55, 0.04);
+const pinMaterials: THREE.MeshBasicMaterial[] = [];
+/** Material da bandeirinha (sem sombra: aparece bem até de noite). */
+function pinMaterial(c: number): THREE.MeshBasicMaterial {
+  pinMaterials[c] ??= new THREE.MeshBasicMaterial({ color: PIN_COLORS[c] ?? PIN_COLORS[0] });
+  return pinMaterials[c];
+}
 /** Altura do modelo robo.glb nas unidades do próprio arquivo. */
 const ROBOT_HEIGHT = 4.79;
 const MENU_FOCUS = new THREE.Vector3(10, 4, 30);
@@ -78,6 +99,9 @@ export class Game {
   readonly models = new ModelLibrary();
   wildlife!: Wildlife;
   fishing!: FishingSystem;
+  fireflies!: FireflyThieves;
+  pet!: PetSystem;
+  story!: StoryProps;
   boatCtl!: BoatController;
   auroraWildlife: Wildlife | null = null;
   readonly player = new Player();
@@ -85,6 +109,8 @@ export class Game {
   building!: BuildingSystem;
   mapRenderer!: MapRenderer;
   auroraMap: MapRenderer | null = null;
+  ecoMap: MapRenderer | null = null;
+  ecoWildlife: Wildlife | null = null;
   ui!: UIManager;
 
   // --- Estado ---
@@ -128,6 +154,7 @@ export class Game {
     const islands = [
       { x: 0, z: 0, r: WORLD_LIMIT_RADIUS },
       { x: AURORA_CENTER.x, z: AURORA_CENTER.z, r: 132 },
+      { x: ECO_CENTER.x, z: ECO_CENTER.z, r: 122 },
     ];
     let nearest = islands[0];
     let bestGap = Infinity;
@@ -146,6 +173,14 @@ export class Game {
   };
   /** 0 = sem aviso; 1 = avisou "com fome"; 2 = avisou "faminto". */
   private hungerWarned = 0;
+  /** Trovões esperando para tocar (segundos até o som). */
+  private thunders: number[] = [];
+  /** Era noite no quadro anterior (para perceber anoitecer e amanhecer). */
+  private wasNight = false;
+  /** Marcadores que o jogador colocou no mapa (c = índice da cor). */
+  pins: Array<{ x: number; z: number; c: number }> = [];
+  /** Bandeirinhas no mundo 3D, uma por marcador. */
+  private readonly pinFlags = new THREE.Group();
   private characterLoaded = '';
   /** A câmera não atravessa paredes de construções, rochas da caverna e pilares. */
   private readonly cameraBlocked = (x: number, y: number, z: number) => this.collision.blocksCamera(x, y, z);
@@ -238,6 +273,7 @@ export class Game {
       sound: (name) => this.audio.play(name),
       splash: (pos) => this.particles.burst(this.tmpVec.copy(pos).setY(0.05), '#d8f6ff', 8, { up: 2.5, speed: 1.4, size: 0.1, life: 0.5 }),
       addXP: (n) => this.progression.addXP(n),
+      rareChance: () => (this.world.dayNight.isNight ? 0.25 : 0) + (this.world.weather.raining ? 0.08 : 0),
     });
     this.interaction.addProvider(this.fishing);
     this.boatCtl = new BoatController(this.player, this.world.terrain, {
@@ -260,6 +296,56 @@ export class Game {
       this.auroraMap = new MapRenderer(this.world.terrain, this.worldState.grids.aurora, auroraPathDistance);
     };
     this.world.scene.add(this.fishing.group);
+    this.world.onEcoCreated = () => {
+      this.ecoWildlife = new Wildlife(this.world.terrain, this.collision, this.models, { x: ECO_CENTER.x, z: ECO_CENTER.z, scale: 0.65, seed: 7 });
+      this.ecoWildlife.onSplash = this.wildlife.onSplash;
+      this.ecoWildlife.build();
+      this.ecoWildlife.setDensity(this.settings.preset.decorationDensity);
+      this.world.scene.add(this.ecoWildlife.group);
+      this.world.ecoResources!.load(this.pendingNodes);
+      this.ecoMap = new MapRenderer(this.world.terrain, this.worldState.grids.eco, ecoPathDistance);
+    };
+    this.fireflies = new FireflyThieves(this.player, this.world.terrain, this.lights, this.bus, {
+      count: (item) => this.inventory.count(item),
+      take: (item, amount) => this.inventory.remove(item, amount),
+      safe: () => this.sheltered() || this.boatCtl.active || this.player.swimming,
+      notify: (text, kind) => this.ui.notify.toast(text, kind, kind === 'success' ? 'tocha' : 'fruta'),
+      addXP: (n) => this.progression.addXP(n),
+    });
+    this.world.scene.add(this.fireflies.group);
+    this.bus.on('fireflies:repelled', () => this.worldState.setFlag('vagalumes_espantados'));
+    this.pet = new PetSystem(this.player, this.world.terrain, this.wildlife, this.models, this.bus, {
+      fruitCount: () => this.inventory.count('fruta'),
+      takeFruit: () => this.inventory.remove('fruta', 1),
+      give: (bundle) => this.giveItems(bundle),
+      notify: (text, kind) => this.ui.notify.toast(text, kind ?? 'info', 'raposa'),
+      sound: (name) => this.audio.play(name),
+      burst: (pos, color, count) => this.particles.burst(pos, color, count, { up: 3, speed: 1.5 }),
+      addXP: (n) => this.progression.addXP(n),
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      setFlag: (f) => this.worldState.setFlag(f),
+      closedChests: () => this.closedChests(),
+      boatSeat: () => {
+        const b = this.boatCtl.boat;
+        if (!b) return null;
+        const root = b.model.root;
+        return { x: root.position.x + Math.sin(b.rot) * 1.2, y: root.position.y + 0.3, z: root.position.z + Math.cos(b.rot) * 1.2, yaw: b.rot };
+      },
+    });
+    this.world.scene.add(this.pet.group);
+    this.story = new StoryProps(this.world.terrain, this.collision, this.interaction, {
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      readPage: (page) => void this.readDiaryPage(page),
+      talkToParrot: () => void this.talkToParrot(),
+    });
+    this.world.scene.add(this.story.group);
+    this.pinFlags.name = 'Marcadores do mapa';
+    this.world.scene.add(this.pinFlags);
+    this.interaction.addProvider(this.pet);
+    this.bus.on('treasure:dug', ({ total }) => {
+      if (total >= 3) this.worldState.setFlag('tesouros_3');
+    });
+    this.wireWeather();
 
     this.torchLight = this.lights.add({
       position: new THREE.Vector3(),
@@ -331,9 +417,11 @@ export class Game {
 
       this.world.update(dt, this.elapsed, focus, this.camera, simulate);
       this.particles.update(dt);
+      this.story?.update(dt, this.elapsed);
       const running = this.state === 'playing' && this.player.speed > 6.5;
       this.wildlife.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
       this.auroraWildlife?.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
+      this.ecoWildlife?.update(dt, this.elapsed, focus, running, this.world.dayNight.night);
       this.lights.update(dt, focus, this.world.dayNight.night);
       this.audio.update(dt);
       if (this.state === 'playing') this.ui.update(dt);
@@ -373,7 +461,7 @@ export class Game {
       const sailing = this.boatCtl.active;
       if (sailing) {
         // A bordo: o movimento controla o barco; E desembarca.
-        this.boatCtl.update(dt, input.getMove(), input.isSprinting(), this.elapsed);
+        this.boatCtl.update(dt, input.getMove(), input.isSprinting(), this.elapsed, this.world.weather.waves);
         if (input.actionPressed('interact') && this.boatCtl.disembark()) {
           this.player.stand();
           this.cameraCtl.distance = this.cameraDistanceBeforeBoat;
@@ -408,8 +496,16 @@ export class Game {
       }
       for (const rm of this.world.resourceManagers) rm.update(dt, this.playTime, this.player.position);
       this.checkAurora();
+      this.checkEco();
       this.fishing.update(dt);
+      this.fireflies.update(dt, this.world.dayNight.night, !this.boatCtl.active && !this.inCave);
+      // A Ilha do Eco vive coberta de névoa (até a Canção dos Lumeni).
+      const ecoDistance = Math.hypot(this.player.position.x - ECO_CENTER.x, this.player.position.z - ECO_CENTER.z);
+      this.world.weather.zoneMist = this.worldState.hasFlag('eco_cancao') ? 0 : 1 - smoothstep(150, 320, ecoDistance);
+      this.wildlife.lure = !this.pet.tamed && this.player.speed < 6.5 && this.inventory.has('fruta');
+      this.pet.update(dt);
       this.updateSurvival(dt);
+      this.updateNight();
 
       // Poeira nos pés ao correr.
       this.dustTimer -= dt;
@@ -491,6 +587,7 @@ export class Game {
       const coast = 1 - smoothstep(1.5, 9, ground);
       const altitude = smoothstep(10, 40, p.y);
       this.audio.setAmbience(1 - this.world.dayNight.night, coast, altitude, this.inCave);
+      this.audio.setRain(this.world.weather.rain, this.sheltered());
     }
 
     this.autosaveTimer -= dt;
@@ -562,6 +659,7 @@ export class Game {
     const toHide = new Set<THREE.Object3D>();
     this.inCave = false;
     for (const zone of [...this.world.landmarks.cameraZones, ...this.building.cameraZones]) {
+      if (zone.below !== undefined && p.y >= zone.below) continue;
       if (Math.hypot(p.x - zone.x, p.z - zone.z) < zone.radius) {
         limit = Math.min(limit, zone.maxDistance);
         for (const o of zone.hide ?? []) toHide.add(o);
@@ -641,6 +739,7 @@ export class Game {
       ui.notify.banner(q.title, 'Missão concluída!', 'missao', 'quest');
       if (q.completeText) ui.notify.toast(q.completeText, 'info', 'estrela');
       if (questId === 'q_observatorio') void this.showChapter2Ending();
+      if (questId === 'q_cancao') void this.showChapter3Ending();
       ui.hud.markQuestsDirty();
       ui.refresh('missoes');
       this.autosaveTimer = Math.min(this.autosaveTimer, 2);
@@ -895,6 +994,8 @@ export class Game {
     this.world.auroraDecorations?.setDensity(preset.decorationDensity);
     this.wildlife?.setDensity(preset.decorationDensity);
     this.auroraWildlife?.setDensity(preset.decorationDensity);
+    this.ecoWildlife?.setDensity(preset.decorationDensity);
+    this.world.ecoDecorations?.setDensity(preset.decorationDensity);
     this.lights.setCount(preset.maxPointLights);
     this.shadowBlob.visible = !preset.shadows;
     // Materiais precisam ser recompilados quando as sombras mudam.
@@ -965,20 +1066,109 @@ export class Game {
     if (immediate) this.world.terrain.get('aurora').buildMeshes();
   }
 
+  /** Cria a Ilha do Eco quando o jogador chega perto (névoa e tudo). */
+  private checkEco(): void {
+    if (this.world.ecoCreated) return;
+    const p = this.player.position;
+    if (Math.hypot(p.x - ECO_CENTER.x, p.z - ECO_CENTER.z) < 330) {
+      this.createEco(false);
+      this.ui.notify.toast('Sinos ao longe… Uma ilha surge no meio da névoa: a Ilha do Eco!', 'quest', 'barco');
+    }
+  }
+
+  private createEco(immediate: boolean): void {
+    this.world.createEco(this.settings.preset.decorationDensity, {
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      setFlag: (f) => this.worldState.setFlag(f),
+      ringBell: (bell) => this.ringBell(bell),
+      talkToIara: () => void this.talkOnEco('iara'),
+      talkToGuardian: () => void this.talkOnEco('guardia'),
+    });
+    if (immediate) this.world.terrain.get('eco').buildMeshes();
+  }
+
   /** Estados dos recursos de todas as ilhas (os ainda não criados vêm do salvamento). */
   private saveNodes(): Record<string, NodeSave> {
     const out: Record<string, NodeSave> = {};
-    if (!this.world.auroraResources && this.pendingNodes) {
-      for (const [id, n] of Object.entries(this.pendingNodes)) if (id.startsWith('aurora:')) out[id] = n;
+    if (this.pendingNodes) {
+      for (const [id, n] of Object.entries(this.pendingNodes)) {
+        if ((!this.world.auroraResources && id.startsWith('aurora:')) || (!this.world.ecoResources && id.startsWith('eco:'))) out[id] = n;
+      }
     }
     for (const rm of this.world.resourceManagers) Object.assign(out, rm.toJSON());
     return out;
   }
 
-  /** Fome e desgaste da tocha acesa. */
+  /** Avisos de mudança do clima e trovões depois dos relâmpagos. */
+  private wireWeather(): void {
+    const weather = this.world.weather;
+    weather.onChange = (kind) => {
+      if (this.state !== 'playing') return;
+      const fires = this.building.count('fogueira') > 0 ? ' Fogueiras ao relento vão apagar.' : '';
+      switch (kind) {
+        case 'nublado':
+          this.ui.notify.toast('O céu está ficando nublado…', 'info', 'nuvem');
+          break;
+        case 'chuva':
+          this.ui.notify.toast(`Começou a chover. Procure um abrigo.${fires}`, 'info', 'chuva');
+          break;
+        case 'tempestade':
+          this.ui.notify.toast(`Tempestade chegando! O mar fica agitado e o barco, difícil de controlar.${fires}`, 'warning', 'tempestade');
+          break;
+        case 'limpo':
+          this.ui.notify.toast('O céu abriu. Que dia bonito!', 'success', 'sol');
+          break;
+      }
+    };
+    weather.onLightning = (distance) => {
+      if (this.state !== 'playing') return;
+      // O som chega depois do clarão (velocidade do som, um pouco acelerada).
+      this.thunders.push(distance / 500);
+      if (distance < 400) this.cameraCtl.shake(0.15);
+    };
+  }
+
+  /** Ao anoitecer, às vezes uma névoa densa cobre a ilha (e some ao amanhecer). */
+  private updateNight(): void {
+    const dn = this.world.dayNight;
+    const night = dn.isNight;
+    if (night === this.wasNight) return;
+    this.wasNight = night;
+    const weather = this.world.weather;
+    if (night) {
+      // Nunca na primeira noite: o jogador ainda está aprendendo.
+      if (dn.day > 1 && Math.random() < MIST_CHANCE) {
+        weather.setMist(true);
+        this.ui.notify.toast('Uma névoa densa cobre a ilha. O minimapa não funciona na névoa: cuidado para não se perder!', 'warning', 'nuvem');
+      }
+    } else if (weather.mistNight) {
+      weather.setMist(false);
+      this.ui.notify.toast('O sol nasceu e a névoa se dissipou.', 'success', 'sol');
+    }
+  }
+
+  /** Abrigado da chuva: sob um telhado, na cabana, na caverna ou a bordo? */
+  private sheltered(): boolean {
+    const p = this.player.position;
+    return this.inCave || this.building.isSheltered(p.x, p.z, p.y);
+  }
+
+  /** Fome, desgaste da tocha acesa, chuva sobre o jogador e trovões. */
   private updateSurvival(dt: number): void {
     const p = this.player;
     if (p.torchOn) this.inventory.wearTool('tocha', dt);
+    const weather = this.world.weather;
+    const sheltered = this.sheltered();
+    p.exposure = sheltered ? 0 : Math.max(0, (weather.rain - 0.3) / 0.7);
+    // A chuva também gasta a tocha mais rápido.
+    if (p.torchOn && p.exposure > 0) this.inventory.wearTool('tocha', dt * p.exposure);
+    for (let i = this.thunders.length - 1; i >= 0; i--) {
+      this.thunders[i] -= dt;
+      if (this.thunders[i] <= 0) {
+        this.thunders.splice(i, 1);
+        this.audio.play('thunder');
+      }
+    }
     if (p.hunger <= 0 && this.hungerWarned < 2) {
       this.hungerWarned = 2;
       this.audio.play('error');
@@ -1015,6 +1205,10 @@ export class Game {
     const summary = await this.saveSystem.summary();
     this.hasSave = summary !== null;
     this.world.dayNight.setTime(16.8);
+    this.world.weather.set('limpo', undefined, true);
+    this.world.weather.setMist(false, true);
+    this.world.weather.zoneMist = 0;
+    this.audio.setRain(0, false);
     this.world.questBeacon.visible = false;
     this.world.targetMarker.visible = false;
     this.ui.setControlMode(this.controlMode, false);
@@ -1169,6 +1363,7 @@ export class Game {
     this.building.clear();
     for (const rm of this.world.resourceManagers) rm.load(undefined);
     this.world.auroraLandmarks?.applyFlags();
+    this.world.ecoLandmarks?.applyFlags();
     if (this.boatCtl.active) {
       this.boatCtl.boat!.boarded = false;
       this.boatCtl.boat = null;
@@ -1178,6 +1373,15 @@ export class Game {
     this.quests.reset();
     this.world.dayNight.day = 1;
     this.world.dayNight.setTime(8);
+    // O primeiro dia começa sempre com céu limpo.
+    this.world.weather.set('limpo', 600, true);
+    this.world.weather.setMist(false, true);
+    this.fireflies?.reset();
+    this.pet?.reset();
+    this.story?.applyFlags();
+    this.setPins([]);
+    this.wasNight = this.world.dayNight.isNight;
+    this.thunders = [];
     this.playTime = 0;
     this.stats = { gathered: 0, crafted: 0, built: 0 };
     const spawn = PLACES.spawn;
@@ -1199,6 +1403,7 @@ export class Game {
       regions: data.world.regions,
       explored: data.world.explored,
       exploredAurora: data.world.exploredAurora,
+      exploredEco: data.world.exploredEco,
     });
     this.inventory.load(data.inventory, data.durability);
     this.progression.load(data.progression);
@@ -1207,15 +1412,24 @@ export class Game {
     if (nearAurora(data.player.x, data.player.z) || data.structures.some((st) => nearAurora(st.x, st.z))) {
       this.createAurora(true);
     }
+    const nearEco = (x: number, z: number) => Math.hypot(x - ECO_CENTER.x, z - ECO_CENTER.z) < 340;
+    if (nearEco(data.player.x, data.player.z) || data.structures.some((st) => nearEco(st.x, st.z))) this.createEco(true);
     this.building.load(data.structures);
     this.pendingNodes = data.world.nodes;
     for (const rm of this.world.resourceManagers) rm.load(data.world.nodes);
     this.world.auroraLandmarks?.applyFlags();
+    this.world.ecoLandmarks?.applyFlags();
     this.world.landmarks.applyFlags();
     this.quests.load(data.quests);
     this.quests.evaluateAll();
     this.world.dayNight.day = Math.max(1, Math.floor(data.world.day));
     this.world.dayNight.setTime(data.world.time);
+    const w = data.world.weather;
+    this.world.weather.set(w && w.kind in WEATHER_NAMES ? (w.kind as WeatherKind) : 'limpo', w ? Math.max(5, w.timer) : undefined, true);
+    this.world.weather.setMist(!!w?.mist && this.world.dayNight.isNight, true);
+    this.fireflies.reset();
+    this.wasNight = this.world.dayNight.isNight;
+    this.thunders = [];
     this.playTime = data.playTime;
     this.stats = { ...data.stats };
     const p = data.player;
@@ -1226,6 +1440,9 @@ export class Game {
     this.player.torchOn = p.torch && this.inventory.has('tocha');
     this.player.buffTime = p.buffTime;
     this.player.hunger = clamp(p.hunger, 0, 100);
+    this.pet.load(data.pet, data.pet?.tameProgress ?? 0);
+    this.story.applyFlags();
+    this.setPins(data.world.pins ?? []);
   }
 
   private createSaveData(): SaveData {
@@ -1256,9 +1473,13 @@ export class Game {
         regions: [...this.worldState.discovered],
         explored: this.worldState.exploredToBase64('principal'),
         exploredAurora: this.worldState.exploredToBase64('aurora'),
+        exploredEco: this.worldState.exploredToBase64('eco'),
         nodes: this.saveNodes(),
+        weather: this.world.weather.toJSON(),
+        pins: this.pins.map((p) => ({ ...p })),
       },
       stats: { ...this.stats },
+      pet: { ...this.pet.toJSON(), tameProgress: this.pet.tameProgress },
     };
   }
 
@@ -1383,14 +1604,169 @@ export class Game {
   /** Mapa da ilha em que o jogador está (ou da mais próxima). */
   get currentMap(): MapRenderer {
     const p = this.player.position;
-    if (this.auroraMap && Math.hypot(p.x - AURORA_CENTER.x, p.z - AURORA_CENTER.z) < Math.hypot(p.x, p.z)) return this.auroraMap;
-    return this.mapRenderer;
+    const options: Array<[MapRenderer | null, number]> = [
+      [this.mapRenderer, Math.hypot(p.x, p.z)],
+      [this.auroraMap, Math.hypot(p.x - AURORA_CENTER.x, p.z - AURORA_CENTER.z)],
+      [this.ecoMap, Math.hypot(p.x - ECO_CENTER.x, p.z - ECO_CENTER.z)],
+    ];
+    let best = this.mapRenderer;
+    let bestD = Infinity;
+    for (const [map, d] of options) {
+      if (map && d < bestD) {
+        best = map;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   /** Objetivo da missão acompanhada (para o feixe de luz e o mapa). */
   questTarget(): { x: number; z: number } | null {
     const quest = this.quests.tracked;
     return quest?.target ?? null;
+  }
+
+  // ===========================================================================
+  // História: diário de Iara e conversas
+  // ===========================================================================
+
+  /** Toca um sino do Eco: nota musical, aviso da altura e marcador da missão. */
+  private ringBell(bell: BellDef): void {
+    this.audio.playBell(bell.freq);
+    const first = !this.worldState.hasFlag(`sino_${bell.id}`);
+    this.worldState.setFlag(`sino_${bell.id}`);
+    if (first) {
+      this.progression.addXP(20);
+      const rung = BELLS.filter((b) => this.worldState.hasFlag(`sino_${b.id}`)).length;
+      this.ui.notify.toast(
+        `O ${bell.name} soa ${bell.pitch === 'média' ? 'numa nota média' : `numa nota ${bell.pitch}`}. (${rung}/3 sinos)` +
+          (rung === 3 ? ' Algo desperta no templo!' : ''),
+        rung === 3 ? 'quest' : 'info',
+        'sino',
+      );
+    } else {
+      this.ui.notify.toast(`O ${bell.name}: nota ${bell.pitch}.`, 'info', 'sino');
+    }
+  }
+
+  private async talkOnEco(who: 'iara' | 'guardia'): Promise<void> {
+    this.audio.play('open');
+    const ctx: EcoDialogueContext = {
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      setFlag: (f) => this.worldState.setFlag(f),
+      bellsRung: () => BELLS.filter((b) => this.worldState.hasFlag(`sino_${b.id}`)).length,
+      song: [],
+      playNote: (id) => {
+        const bell = BELLS.find((b) => b.id === id);
+        if (bell) this.audio.playBell(bell.freq);
+        this.world.ecoLandmarks?.swingBell(bell?.id ?? 'sul');
+      },
+      songCorrect: () => ctx.song.length === LUMENI_SONG.length && ctx.song.every((n, i) => n === LUMENI_SONG[i]),
+    };
+    await runDialogue(who === 'iara' ? IARA : GUARDIAN, ctx, (opts) => this.ui.dialogs.choose(opts));
+    // Só depois da despedida da guardiã: a missão conclui e o final do capítulo aparece.
+    if (who === 'guardia' && ctx.songCorrect() && !this.worldState.hasFlag('eco_cancao')) {
+      this.worldState.setFlag('eco_cancao');
+      this.world.ecoLandmarks?.applyFlags();
+      this.audio.play('portal');
+    }
+  }
+
+  private async readDiaryPage(page: DiaryPage): Promise<void> {
+    const first = !this.worldState.hasFlag(page.id);
+    if (first) {
+      this.worldState.setFlag(page.id);
+      this.progression.addXP(10);
+      this.audio.play('discover');
+      const count = diaryCount((f) => this.worldState.hasFlag(f));
+      if (count >= 5) this.worldState.setFlag('diario_5');
+      if (count >= DIARY_PAGES.length) this.worldState.setFlag('diario_completo');
+    }
+    await this.ui.dialogs.lore(page);
+    if (first) {
+      const count = diaryCount((f) => this.worldState.hasFlag(f));
+      this.ui.notify.toast(`Página do diário encontrada (${count}/${DIARY_PAGES.length}). Releia no menu Missões (J).`, 'success', 'diario');
+    }
+  }
+
+  async talkToParrot(): Promise<void> {
+    this.audio.play('open');
+    const ctx: DialogueContext = {
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      setFlag: (f) => this.worldState.setFlag(f),
+      fruitCount: () => this.inventory.count('fruta'),
+      takeFruit: () => this.inventory.remove('fruta', 1),
+      questHint: () => {
+        const quest = this.quests.tracked;
+        if (!quest) return null;
+        const next = this.quests.objectives(quest).find((o) => !o.done);
+        return next ? `Na missão "${quest.title}", o próximo passo é: ${next.text}. ${quest.description}` : quest.description;
+      },
+      revealTreasure: () => {
+        const t = this.pet.revealNext();
+        if (!t) return null;
+        this.toggleMapPin(t.x, t.z, 3, 0);
+        return regionAt(t.x, t.z)?.name ?? (t.id.startsWith('tesouro_a') ? 'a Ilha da Aurora' : 'um canto escondido da ilha');
+      },
+      diaryCount: () => diaryCount((f) => this.worldState.hasFlag(f)),
+      diaryTotal: () => DIARY_PAGES.length,
+      sound: (name) => this.audio.play(name),
+    };
+    await runDialogue(PARROT, ctx, (opts) => this.ui.dialogs.choose(opts));
+  }
+
+  // ===========================================================================
+  // Marcadores do mapa
+  // ===========================================================================
+
+  /**
+   * Toque no mapa: tira o marcador que estiver perto (dentro de `radius`
+   * metros) ou coloca um novo com a cor escolhida. Retorna o que aconteceu.
+   */
+  toggleMapPin(x: number, z: number, color: number, radius: number): 'added' | 'removed' | 'full' {
+    const i = this.pins.findIndex((p) => Math.hypot(p.x - x, p.z - z) <= radius);
+    if (i >= 0) {
+      this.setPins(this.pins.filter((_, k) => k !== i));
+      this.audio.play('remove');
+      return 'removed';
+    }
+    if (this.pins.length >= MAX_PINS) {
+      this.ui.notify.toast(`Você já colocou ${MAX_PINS} marcadores. Tire algum para marcar outro lugar.`, 'warning', 'mapa');
+      return 'full';
+    }
+    this.setPins([...this.pins, { x, z, c: color }]);
+    this.audio.play('click');
+    return 'added';
+  }
+
+  clearMapPins(): void {
+    this.setPins([]);
+  }
+
+  private setPins(pins: Array<{ x: number; z: number; c: number }>): void {
+    this.pins = pins;
+    // Bandeirinhas no mundo: um mastro alto com a cor do marcador.
+    for (const child of [...this.pinFlags.children]) this.pinFlags.remove(child);
+    for (const p of pins) {
+      const flag = new THREE.Group();
+      const pole = new THREE.Mesh(PIN_POLE, PIN_POLE_MAT);
+      pole.position.y = 2;
+      const cloth = new THREE.Mesh(PIN_CLOTH, pinMaterial(p.c));
+      cloth.position.set(0.45, 3.5, 0);
+      flag.add(pole, cloth);
+      flag.position.set(p.x, this.world.terrain.getHeight(p.x, p.z), p.z);
+      this.pinFlags.add(flag);
+    }
+  }
+
+  /** Baús da história ainda fechados. */
+  closedChests(): Array<{ x: number; z: number }> {
+    const chests: Array<[string, { x: number; z: number }]> = [
+      ['bau_praia', PLACES.chestBeach],
+      ['bau_floresta', PLACES.chestForest],
+      ['bau_caverna', PLACES.chestCave],
+    ];
+    return chests.filter(([flag]) => !this.worldState.hasFlag(flag)).map(([, pos]) => pos);
   }
 
   /** Dados para desenhar o mapa e o minimapa. */
@@ -1409,16 +1785,18 @@ export class Game {
       AURORA_PLACES.pylonWest,
       AURORA_PLACES.pylonEast,
       AURORA_PLACES.pylonSouth,
+      ECO_PLACES.temple,
+      ECO_PLACES.bellWest,
+      ECO_PLACES.bellEast,
+      ECO_PLACES.bellSouth,
     ];
     for (const l of landmarks) if (ws.isExplored(l.x, l.z)) markers.push({ x: l.x, z: l.z, type: 'landmark' });
-    const chests: Array<[string, { x: number; z: number }]> = [
-      ['bau_praia', PLACES.chestBeach],
-      ['bau_floresta', PLACES.chestForest],
-      ['bau_caverna', PLACES.chestCave],
-    ];
-    for (const [flag, pos] of chests) {
-      if (!ws.hasFlag(flag) && ws.isExplored(pos.x, pos.z)) markers.push({ x: pos.x, z: pos.z, type: 'chest' });
+    for (const pos of this.closedChests()) {
+      if (ws.isExplored(pos.x, pos.z)) markers.push({ x: pos.x, z: pos.z, type: 'chest' });
     }
+    for (const p of this.pins) markers.push({ x: p.x, z: p.z, type: 'pin', color: PIN_COLORS[p.c] });
+    // Tesouros que a raposa achou e ainda não foram escavados.
+    for (const t of this.pet.foundTreasures) markers.push({ x: t.x, z: t.z, type: 'chest' });
     const target = this.questTarget();
     if (target) markers.push({ x: target.x, z: target.z, type: 'quest' });
     return {
@@ -1427,6 +1805,7 @@ export class Game {
       playerYaw: this.player.yaw,
       cameraYaw: full ? 0 : this.cameraCtl.yaw,
       markers,
+      hidePlayer: this.world.weather.misty,
     };
   }
 
@@ -1491,6 +1870,17 @@ export class Game {
       playerPosition: () => this.player.position,
       playerYaw: () => this.player.yaw,
       playTime: () => this.playTime,
+      raining: () => this.world.weather.raining,
+      chooseCrop: async (options: CropId[]) => {
+        const answer = await this.ui.dialogs.choose({
+          title: 'O que plantar?',
+          options: options.map((id) => {
+            const seed = ITEMS[CROPS[id].seed];
+            return { label: `${seed.name} (${this.inventory.count(seed.id)})`, value: id, icon: seed.icon };
+          }),
+        });
+        return isCropId(answer) ? answer : null;
+      },
     };
   }
 
@@ -1498,6 +1888,8 @@ export class Game {
     await this.ui.fade(() => {
       const nextDay = this.world.dayNight.hour >= 7;
       this.world.dayNight.setTime(7, nextDay);
+      this.world.weather.setMist(false, true);
+      this.fireflies.reset();
       this.player.energy = this.player.maxEnergy;
       this.player.hunger = Math.max(0, this.player.hunger - 15);
     }, 900);
@@ -1509,6 +1901,27 @@ export class Game {
     this.player.energy = this.player.maxEnergy;
     void this.saveGame(true);
     this.ui.notify.toast('Você descansou: energia restaurada. (À noite, a cama permite dormir até o amanhecer.)', 'success', 'raio');
+  }
+
+  private async showChapter3Ending(): Promise<void> {
+    await this.ui.dialogs.custom(
+      `
+      <div class="ending">
+        <div class="welcome-icon">${icon('estrela')}</div>
+        <h2>Fim do Capítulo 3: O Eco das Estrelas</h2>
+        <p>Você encontrou a capitã Iara, tocou os sinos antigos e cantou a Canção dos Lumeni. A névoa se abriu e as três ilhas brilham juntas no céu: a constelação dos Lumeni está completa.</p>
+        <p>Iara vai voltar para casa — e o Pipoca, finalmente, vai rever a sua capitã.</p>
+        <div class="pause-stats">
+          <div><span>Nível</span><b>${this.progression.level}</b></div>
+          <div><span>Dias</span><b>${this.world.dayNight.day}</b></div>
+          <div><span>Missões</span><b>${this.quests.completed.size}/${this.quests.totalQuests}</b></div>
+          <div><span>Páginas do diário</span><b>${diaryCount((f) => this.worldState.hasFlag(f))}/${DIARY_PAGES.length}</b></div>
+        </div>
+        <p class="muted">O mundo continua aberto: termine as missões opcionais, decore sua casa e explore as três ilhas.</p>
+      </div>`,
+      'Continuar explorando',
+    );
+    await this.saveGame(false);
   }
 
   private async showChapter2Ending(): Promise<void> {
@@ -1524,7 +1937,7 @@ export class Game {
           <div><span>Missões</span><b>${this.quests.completed.size}/${this.quests.totalQuests}</b></div>
           <div><span>Construções</span><b>${this.stats.built}</b></div>
         </div>
-        <p class="muted">Novas ilhas no mapa de estrelas dos Lumeni chegarão em futuras atualizações.</p>
+        <p class="muted">O Mapa de Estrelas ainda guarda uma terceira ilha, ao sul, escondida na névoa… Pergunte ao Pipoca!</p>
       </div>`,
       'Continuar explorando',
     );

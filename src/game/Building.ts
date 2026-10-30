@@ -16,20 +16,18 @@ import type { SoundName } from '../core/AudioManager';
 import { boxesOverlap, circleOverlapsBox, type Collider, type CollisionWorld } from './Collision';
 import { ITEMS, isItemId, type ItemBundle, type ItemId } from './data/items';
 import type { StationId } from './data/recipes';
+import { CROP_ORDER, CROPS, isCropId, type CropId } from './data/crops';
 import { GRID, STRUCTURES, WALL_HEIGHT, isStructureId, type StructureDef, type StructureId } from './data/structures';
 import type { GameEventBus, NotifyKind } from './events';
-import type { Interactable, InteractableProvider } from './InteractionSystem';
+import type { InteractAction, Interactable, InteractableProvider } from './InteractionSystem';
 import type { Inventory } from './Inventory';
 import type { LightManager, LightSource } from './LightManager';
-import { createStructureModel, type StructureModel } from './models/structures';
+import { STAIR_RISE, STAIR_STEPS, createStructureModel, type StructureModel } from './models/structures';
 import type { StructureSave } from './save/SaveData';
 import type { CameraZone } from './world/Landmarks';
 import { PROTECTED_ZONES, WATER_LEVEL } from './world/layout';
 import type { ResourceManager } from './world/ResourceNodes';
 import type { HeightField } from './world/Terrain';
-
-/** Segundos de jogo para a batata-doce crescer no canteiro. */
-export const CROP_GROW_SECONDS = 240;
 
 export interface BuildingHooks {
   inventory: Inventory;
@@ -48,6 +46,10 @@ export interface BuildingHooks {
   playTime(): number;
   hasFlag(flag: string): boolean;
   boardBoat(structure: PlacedStructure): void;
+  /** Está chovendo forte o bastante para apagar fogueiras. */
+  raining(): boolean;
+  /** Pergunta ao jogador o que plantar (quando há mais de um tipo de semente). */
+  chooseCrop(options: CropId[]): Promise<CropId | null>;
 }
 
 export interface PlacedStructure {
@@ -69,10 +71,24 @@ export interface PlacedStructure {
   storage?: Map<ItemId, number>;
   /** Momento (tempo de jogo) em que algo foi plantado; -1 = canteiro vazio. */
   plantedAt?: number;
+  /** O que está plantado no canteiro. */
+  crop?: CropId;
   /** Animação da tampa do baú (0 fechado, 1 aberto). */
   lidOpen?: number;
   /** Barco com o jogador a bordo (não pode ser removido). */
   boarded?: boolean;
+  /** Fogueira acesa (a chuva apaga as que estão ao relento). */
+  lit?: boolean;
+  /** Segundos de chuva que a fogueira já tomou (apaga ao chegar a RAIN_TO_EXTINGUISH). */
+  wetness?: number;
+  /** Piso do segundo andar (sem base até o chão; dá para passar por baixo). */
+  upper?: boolean;
+  /** Porta aberta (parede com porta). */
+  doorOpen?: boolean;
+  /** Ângulo atual da folha da porta (anima até abrir/fechar). */
+  doorAngle?: number;
+  /** Colisão da folha da porta (só existe com a porta fechada). */
+  doorCollider?: Collider | null;
 }
 
 export type BuildMode = 'none' | 'place' | 'remove';
@@ -81,9 +97,14 @@ export interface PlacementCheck {
   ok: boolean;
   reason?: string;
   y: number;
+  /** Piso do segundo andar. */
+  upper?: boolean;
 }
 
 let structureCounter = 0;
+
+/** Segundos de chuva ao relento até a fogueira apagar. */
+const RAIN_TO_EXTINGUISH = 6;
 
 /** Centro da célula da grade que contém a coordenada. */
 const cellCenter = (v: number) => Math.floor(v / GRID) * GRID + GRID / 2;
@@ -135,7 +156,28 @@ export class BuildingSystem implements InteractableProvider {
   }
 
   isNearStation(station: StationId, pos: THREE.Vector3, radius = 6): boolean {
-    return this.structures.some((s) => s.def.station === station && Math.hypot(s.x - pos.x, s.z - pos.z) <= radius);
+    return this.structures.some(
+      (s) => s.def.station === station && s.lit !== false && Math.hypot(s.x - pos.x, s.z - pos.z) <= radius,
+    );
+  }
+
+  /** Há um telhado (modular ou da cabana) sobre este ponto? */
+  isSheltered(x: number, z: number, y?: number): boolean {
+    for (const s of this.structures) {
+      if (s.def.modular === 'telhado') {
+        if (Math.abs(x - s.x) <= GRID / 2 + 0.15 && Math.abs(z - s.z) <= GRID / 2 + 0.15 && (y === undefined || y < s.y)) return true;
+      } else if (s.type === 'cabana') {
+        // Coordenadas locais da cabana (6 x 5 m).
+        const dx = x - s.x;
+        const dz = z - s.z;
+        const cos = Math.cos(s.rot);
+        const sin = Math.sin(s.rot);
+        const lx = dx * cos - dz * sin;
+        const lz = dx * sin + dz * cos;
+        if (Math.abs(lx) <= 3.2 && Math.abs(lz) <= 2.7 && (y === undefined || y < s.y + 3)) return true;
+      }
+    }
+    return false;
   }
 
   /** Zonas de câmera: cabanas e telhados modulares (escondem o teto lá dentro). */
@@ -183,6 +225,8 @@ export class BuildingSystem implements InteractableProvider {
     if (STRUCTURES[type].modular === 'parede') {
       // A parede começa de frente para o jogador.
       this.ghostRot = Math.abs(Math.cos(yaw)) > Math.abs(Math.sin(yaw)) ? 0 : Math.PI / 2;
+    } else if (STRUCTURES[type].modular === 'escada') {
+      this.ghostRot = this.snapQuarter(yaw);
     } else if (STRUCTURES[type].modular) {
       this.ghostRot = 0;
     } else if (STRUCTURES[type].onWater) {
@@ -211,6 +255,7 @@ export class BuildingSystem implements InteractableProvider {
   rotateGhost(): void {
     const modular = this.placingType ? STRUCTURES[this.placingType].modular : undefined;
     if (modular === 'parede') this.ghostRot = this.ghostRot === 0 ? Math.PI / 2 : 0;
+    else if (modular === 'escada') this.ghostRot = this.snapQuarter(this.ghostRot + Math.PI / 2);
     else if (!modular) this.ghostRot = this.snapAngle(this.ghostRot + Math.PI / 4);
     this.manualRotation = true;
     this.hooks.sound('rotate');
@@ -231,7 +276,16 @@ export class BuildingSystem implements InteractableProvider {
       this.hooks.notify('Materiais insuficientes', 'warning');
       return false;
     }
-    const placed = this.place(type, this.ghostPos.x, this.ghostPos.z, this.ghostRot, true, undefined, def.modular ? check.y : undefined);
+    const placed = this.place(
+      type,
+      this.ghostPos.x,
+      this.ghostPos.z,
+      this.ghostRot,
+      true,
+      undefined,
+      def.modular || def.furniture ? check.y : undefined,
+      check.upper ? { upper: 1 } : undefined,
+    );
     this.hooks.sound('build');
     this.hooks.burst(new THREE.Vector3(placed.x, placed.y + 0.5, placed.z), '#d8c7a0', 24);
     this.hooks.addXP(def.xp);
@@ -256,7 +310,8 @@ export class BuildingSystem implements InteractableProvider {
         const k = 1 - (1 - s.buildAnim) ** 3;
         s.model.root.scale.set(1, Math.max(0.01, k), 1);
       }
-      if (s.model.flames) {
+      if (s.type === 'fogueira') this.updateCampfireRain(s, dt);
+      if (s.model.flames && s.lit !== false) {
         if (s.type === 'fogueira') {
           s.model.flames.children.forEach((f, i) => {
             const t = this.time * (8 + i * 3) + i;
@@ -269,6 +324,11 @@ export class BuildingSystem implements InteractableProvider {
         }
       }
       if (s.type === 'canteiro') this.updateGardenVisual(s, now);
+      if (s.model.door) {
+        const target = s.doorOpen ? -1.75 : 0;
+        s.doorAngle = (s.doorAngle ?? 0) + (target - (s.doorAngle ?? 0)) * Math.min(1, dt * 8);
+        s.model.door.rotation.y = s.doorAngle;
+      }
       if (s.model.lid && s.lidOpen !== undefined) {
         // A tampa abre ao usar o baú e fecha sozinha depois.
         s.lidOpen = Math.max(0, s.lidOpen - dt * 0.4);
@@ -297,6 +357,7 @@ export class BuildingSystem implements InteractableProvider {
             z = cellCenter(tz);
           }
         } else {
+          if (def.modular === 'escada' && !this.manualRotation) this.ghostRot = this.snapQuarter(yaw);
           x = cellCenter(tx);
           z = cellCenter(tz);
         }
@@ -334,6 +395,7 @@ export class BuildingSystem implements InteractableProvider {
 
     if (def.modular) return this.validateModular(type, x, z, rot, y, min, max);
     if (def.onWater) return this.validateWater(type, x, z, rot, max);
+    if (def.furniture) return this.validateFurniture(type, x, z, rot, min, max);
 
     if (min < WATER_LEVEL + 0.3) return fail('Não é possível construir na água');
     if (max - min > def.maxSlope) return fail('Terreno muito inclinado');
@@ -354,37 +416,81 @@ export class BuildingSystem implements InteractableProvider {
     const kind = def.modular!;
     const hw = def.footprint.w / 2;
     const hd = def.footprint.d / 2;
-    const fail = (reason: string): PlacementCheck => ({ ok: false, reason, y });
-
-    // Uma peça de cada tipo por posição.
-    if (this.structures.some((s) => s.def.modular === kind && Math.abs(s.x - x) < 0.1 && Math.abs(s.z - z) < 0.1)) {
-      return fail('Já existe uma peça aqui');
+    const p = this.hooks.playerPosition();
+    let upper = false;
+    if (kind === 'piso') {
+      // Com paredes em volta (ou um piso alto ao lado), o piso vira o do segundo andar.
+      const level = this.upperLevel(x, z);
+      const below = this.structures.some((s) => s.def.modular === 'piso' && Math.abs(s.x - x) < 0.1 && Math.abs(s.z - z) < 0.1);
+      if (level !== null && (below || p.y > level - 0.8)) {
+        y = level;
+        upper = true;
+      }
+    } else if (kind === 'parede') {
+      y = this.wallBase(x, z, p.y) ?? max;
+    } else if (kind === 'escada') {
+      y = this.floorTopAt(x, z, p.y) ?? max;
     }
+    const fail = (reason: string): PlacementCheck => ({ ok: false, reason, y, upper });
+
+    // Uma peça de cada tipo por posição (e por andar).
+    const same = (s: PlacedStructure) => Math.abs(s.x - x) < 0.1 && Math.abs(s.z - z) < 0.1 && Math.abs(s.y - y) < 0.5;
+    if (this.structures.some((s) => s.def.modular === kind && same(s))) return fail('Já existe uma peça aqui');
     if (kind === 'telhado') {
       if (this.roofBase(x, z) === null) return fail('O telhado precisa de uma parede na borda da célula');
+      if (this.structures.some((s) => s.def.modular === 'piso' && same(s))) return fail('Já existe um piso aqui');
       return { ok: true, y };
     }
-    const onFloor = kind === 'parede' && this.wallBase(x, z) !== null;
+    if (kind === 'piso' && upper && this.structures.some((s) => s.def.modular === 'escada' && Math.abs(s.x - x) < 0.1 && Math.abs(s.z - z) < 0.1 && s.y < y)) {
+      return fail('Deixe o espaço da escada livre');
+    }
+    const onFloor = upper || ((kind === 'parede' || kind === 'escada') && this.floorNear(x, z, y));
     if (!onFloor) {
       if (min < WATER_LEVEL + 0.3) return fail('Não é possível construir na água');
       if (max - min > def.maxSlope) return fail('Terreno muito inclinado');
     }
-    // Não pode invadir construções comuns (cabana, bancada...).
+    // Não pode invadir construções comuns (cabana, bancada...) no mesmo andar.
     const footprint = { x, z, hw, hd, rot };
     for (const s of this.structures) {
-      if (s.def.modular) continue;
+      if (s.def.modular || s.def.furniture || Math.abs(s.y - y) > 2) continue;
       const other = { x: s.x, z: s.z, hw: s.def.footprint.w / 2, hd: s.def.footprint.d / 2, rot: s.rot };
       if (boxesOverlap(footprint, other)) return fail('Espaço ocupado por outra construção');
     }
-    const modularIds = new Set(this.structures.filter((s) => s.def.modular).map((s) => s.id));
-    if (this.collision.overlapsBox(x, z, hw * 0.95, hd * 0.95, rot, (c) => !!c.tag && modularIds.has(c.tag))) {
+    const ours = new Set(this.structures.filter((s) => s.def.modular || s.def.furniture).map((s) => s.id));
+    if (!upper && this.collision.overlapsBox(x, z, hw * 0.95, hd * 0.95, rot, (c) => (!!c.tag && ours.has(c.tag)) || c.top < y - 2)) {
       return fail('Espaço ocupado');
     }
-    if (this.resources.anyInBox(x, z, hw, hd, rot)) return fail('Há plantas ou pedras no caminho');
-    if (kind === 'parede') {
-      const p = this.hooks.playerPosition();
+    if (!onFloor && this.resources.anyInBox(x, z, hw, hd, rot)) return fail('Há plantas ou pedras no caminho');
+    if (kind === 'parede' && Math.abs(p.y - y) < 1.5) {
       if (circleOverlapsBox(p.x, p.z, 0.45, x, z, hw, hd, rot)) return fail('Saia de cima do local');
     }
+    return { ok: true, y, upper };
+  }
+
+  /** Móveis: no chão ou em cima de um piso (em qualquer andar). */
+  private validateFurniture(type: StructureId, x: number, z: number, rot: number, min: number, max: number): PlacementCheck {
+    const def = STRUCTURES[type];
+    const hw = def.footprint.w / 2;
+    const hd = def.footprint.d / 2;
+    const p = this.hooks.playerPosition();
+    const floor = this.floorTopAt(x, z, p.y);
+    const y = floor ?? this.terrain.getHeight(x, z);
+    const fail = (reason: string): PlacementCheck => ({ ok: false, reason, y });
+    if (floor === null) {
+      if (min < WATER_LEVEL + 0.3) return fail('Não é possível construir na água');
+      if (max - min > def.maxSlope) return fail('Terreno muito inclinado');
+      if (this.resources.anyInBox(x, z, hw, hd, rot)) return fail('Há plantas ou pedras no caminho');
+    }
+    const footprint = { x, z, hw, hd, rot };
+    for (const s of this.structures) {
+      if (s.def.modular || type === 'tapete' || s.type === 'tapete' || Math.abs(s.y - y) > 1.5) continue;
+      const other = { x: s.x, z: s.z, hw: s.def.footprint.w / 2, hd: s.def.footprint.d / 2, rot: s.rot };
+      if (boxesOverlap(footprint, other)) return fail('Espaço ocupado por outro móvel');
+    }
+    // Paredes e outros obstáculos do mesmo andar (pisos e telhados não contam).
+    const blocked = this.collision.overlapsBox(x, z, hw * 0.9, hd * 0.9, rot, (c) => c.top <= y + 0.3 || (c.bottom ?? -Infinity) >= y + 1.8);
+    if (blocked && type !== 'tapete') return fail('Espaço ocupado');
+    if (def.solid && Math.abs(p.y - y) < 1.5 && circleOverlapsBox(p.x, p.z, 0.45, x, z, hw, hd, rot)) return fail('Saia de cima do local');
     return { ok: true, y };
   }
 
@@ -408,15 +514,53 @@ export class BuildingSystem implements InteractableProvider {
     return { ok: true, y: WATER_LEVEL };
   }
 
-  /** Altura do topo do piso sob uma parede (ou null se não houver piso ao lado). */
-  private wallBase(x: number, z: number): number | null {
+  /**
+   * Altura do topo do piso sob uma parede (ou null se não houver piso ao lado).
+   * Com dois andares, escolhe o piso mais perto da altura do jogador.
+   */
+  private wallBase(x: number, z: number, preferY = -Infinity): number | null {
     let best: number | null = null;
     for (const s of this.structures) {
       if (s.def.modular !== 'piso') continue;
       // A parede está na borda do piso: o centro dela fica a 1 m do centro do piso.
       if (Math.abs(s.x - x) <= GRID / 2 + 0.05 && Math.abs(s.z - z) <= GRID / 2 + 0.05) {
-        best = Math.max(best ?? -Infinity, s.y + 0.15);
+        const top = s.y + 0.15;
+        if (best === null || Math.abs(top - preferY) < Math.abs(best - preferY)) best = top;
       }
+    }
+    return best;
+  }
+
+  /** Topo do piso que cobre o ponto, no andar mais perto de `preferY` (ou null). */
+  floorTopAt(x: number, z: number, preferY: number): number | null {
+    let best: number | null = null;
+    for (const s of this.structures) {
+      if (s.def.modular !== 'piso') continue;
+      if (Math.abs(s.x - x) <= GRID / 2 && Math.abs(s.z - z) <= GRID / 2) {
+        const top = s.y + 0.15;
+        if (best === null || Math.abs(top - preferY) < Math.abs(best - preferY)) best = top;
+      }
+    }
+    return best;
+  }
+
+  /** Há um piso nesta célula (ou ao lado, para paredes) com o topo na altura `y`? */
+  private floorNear(x: number, z: number, y: number): boolean {
+    return this.structures.some(
+      (s) => s.def.modular === 'piso' && Math.abs(s.x - x) <= GRID / 2 + 0.05 && Math.abs(s.z - z) <= GRID / 2 + 0.05 && Math.abs(s.y + 0.15 - y) < 0.05,
+    );
+  }
+
+  /** Altura do piso do segundo andar nesta célula: topo das paredes em volta ou um piso alto vizinho. */
+  private upperLevel(x: number, z: number): number | null {
+    const walls = this.roofBase(x, z);
+    if (walls !== null) return walls;
+    let best: number | null = null;
+    for (const s of this.structures) {
+      if (!s.upper) continue;
+      const dx = Math.abs(s.x - x);
+      const dz = Math.abs(s.z - z);
+      if ((dx < 0.1 && Math.abs(dz - GRID) < 0.1) || (dz < 0.1 && Math.abs(dx - GRID) < 0.1)) best = Math.max(best ?? -Infinity, s.y);
     }
     return best;
   }
@@ -549,12 +693,14 @@ export class BuildingSystem implements InteractableProvider {
       }
       case 'fogueira':
         circle(0.75, 0.9);
+        structure.lit = data?.lit !== 0;
+        structure.wetness = 0;
         structure.use = {
           id: `${structure.id}:usar`,
           position: new THREE.Vector3(x, y + 0.5, z),
           radius: 1,
-          getAction: () => ({ label: 'Cozinhar na fogueira', enabled: true }),
-          interact: () => this.hooks.openCrafting('fogueira'),
+          getAction: () => this.campfireAction(structure),
+          interact: () => (structure.lit ? this.hooks.openCrafting('fogueira') : this.relight(structure)),
         };
         break;
       case 'bancada':
@@ -590,6 +736,7 @@ export class BuildingSystem implements InteractableProvider {
         break;
       case 'canteiro':
         structure.plantedAt = typeof data?.plantedAt === 'number' ? data.plantedAt : -1;
+        structure.crop = isCropId(data?.crop) ? data.crop : 'batata';
         structure.use = {
           id: `${structure.id}:horta`,
           position: new THREE.Vector3(x, y + 0.4, z),
@@ -599,7 +746,37 @@ export class BuildingSystem implements InteractableProvider {
         };
         break;
       case 'piso':
-        box(0, 0, 1, 1, 0.15);
+        structure.upper = data?.upper === 1;
+        if (structure.upper) {
+          // Segundo andar: sem base até o chão, dá para andar por baixo.
+          if (model.foundation) model.foundation.visible = false;
+          box(0, 0, 1, 1, 0.15, -0.08);
+        } else {
+          box(0, 0, 1, 1, 0.15);
+        }
+        break;
+      case 'escada': {
+        // Degraus: cada caixa vai da frente do degrau até o fim da escada, um
+        // pouco mais alta que a anterior. Assim, mesmo com o jogo lento (passos
+        // grandes por quadro), o jogador nunca "atravessa" um degrau fino.
+        const rise = STAIR_RISE / STAIR_STEPS;
+        const depth = 2 / STAIR_STEPS;
+        for (let i = 0; i < STAIR_STEPS; i++) {
+          const front = -1 + depth * i;
+          box(0, (front + 1) / 2, 0.8, (1 - front) / 2, (i + 1) * rise);
+        }
+        break;
+      }
+      case 'mesa':
+        box(0, 0, 0.7, 0.45, 0.82);
+        break;
+      case 'cadeira':
+        box(0, 0, 0.26, 0.26, 0.48);
+        break;
+      case 'vaso':
+        circle(0.2, 0.45);
+        break;
+      case 'tapete':
         break;
       case 'parede':
       case 'parede_janela':
@@ -609,6 +786,17 @@ export class BuildingSystem implements InteractableProvider {
         box(-0.775, 0, 0.275, 0.15, WALL_HEIGHT);
         box(0.775, 0, 0.275, 0.15, WALL_HEIGHT);
         box(0, 0, 0.5, 0.15, WALL_HEIGHT, 2.15); // verga acima da porta
+        structure.doorOpen = data?.open === 1;
+        structure.doorAngle = structure.doorOpen ? -1.75 : 0;
+        if (model.door) model.door.rotation.y = structure.doorAngle;
+        structure.doorCollider = structure.doorOpen ? null : this.addDoorCollider(structure);
+        structure.use = {
+          id: `${structure.id}:porta`,
+          position: new THREE.Vector3(x, y + 1, z),
+          radius: 1.2,
+          getAction: () => ({ label: structure.doorOpen ? 'Fechar porta' : 'Abrir porta', enabled: true }),
+          interact: () => this.toggleDoor(structure),
+        };
         break;
       case 'telhado':
         box(0, 0, 1.15, 1.15, 0.55, -0.05); // dá para passar por baixo
@@ -652,8 +840,9 @@ export class BuildingSystem implements InteractableProvider {
     };
 
     this.structures.push(structure);
+    if (structure.lit === false) this.setLit(structure, false);
     if (type === 'canteiro') this.updateGardenVisual(structure, this.hooks.playTime());
-    if (def.modular === 'telhado') this.rebuildRoofZones();
+    if (def.modular || def.furniture) this.rebuildRoofZones();
     return structure;
   }
 
@@ -663,9 +852,10 @@ export class BuildingSystem implements InteractableProvider {
     this.structures.splice(i, 1);
     this.group.remove(structure.model.root);
     for (const c of structure.colliders) this.collision.remove(c);
+    if (structure.doorCollider) this.collision.remove(structure.doorCollider);
     if (structure.light) this.lights.remove(structure.light);
     for (const h of structure.zone?.hide ?? []) h.visible = true;
-    if (structure.def.modular === 'telhado') {
+    if (structure.def.modular || structure.def.furniture) {
       structure.model.root.visible = true;
       this.rebuildRoofZones();
     }
@@ -734,70 +924,181 @@ export class BuildingSystem implements InteractableProvider {
   /** Progresso do canteiro (0 a 1), ou -1 se estiver vazio. */
   gardenProgress(s: PlacedStructure, now = this.hooks.playTime()): number {
     if (s.plantedAt === undefined || s.plantedAt < 0) return -1;
-    return Math.min(1, Math.max(0, (now - s.plantedAt) / CROP_GROW_SECONDS));
+    const grow = CROPS[s.crop ?? 'batata'].growSeconds;
+    return Math.min(1, Math.max(0, (now - s.plantedAt) / grow));
   }
 
-  private gardenAction(s: PlacedStructure) {
+  /** Plantas que o jogador pode plantar agora (tem a semente). */
+  private availableCrops(): CropId[] {
+    return CROP_ORDER.filter((id) => this.hooks.inventory.has(CROPS[id].seed));
+  }
+
+  private gardenAction(s: PlacedStructure): InteractAction {
     const k = this.gardenProgress(s);
     if (k < 0) {
-      return this.hooks.inventory.has('semente')
-        ? { label: 'Plantar semente', enabled: true }
-        : { label: 'Plantar semente', enabled: false, reason: 'Precisa de Semente (às vezes vem do capim alto)' };
+      const crops = this.availableCrops();
+      if (crops.length === 0) {
+        return { label: 'Plantar semente', enabled: false, reason: 'Precisa de uma semente (o capim alto às vezes dá)' };
+      }
+      return { label: crops.length === 1 ? `Plantar ${ITEMS[CROPS[crops[0]].seed].name}` : 'Plantar…', enabled: true };
     }
     if (k < 1) return { label: `Crescendo… ${Math.floor(k * 100)}%`, enabled: false, reason: 'Ainda não está pronto para colher' };
-    return { label: 'Colher batatas-doces', enabled: true };
+    return { label: CROPS[s.crop ?? 'batata'].harvestLabel, enabled: true };
   }
 
   private useGarden(s: PlacedStructure): void {
     const k = this.gardenProgress(s);
     const pos = new THREE.Vector3(s.x, s.y + 0.4, s.z);
     if (k < 0) {
-      if (!this.hooks.inventory.remove('semente', 1)) return;
-      s.plantedAt = this.hooks.playTime();
-      this.hooks.sound('leaves');
-      this.hooks.burst(pos, '#6b4a2e', 10);
-      this.hooks.notify('Semente plantada! Volte em alguns minutos para colher.', 'success');
+      const crops = this.availableCrops();
+      if (crops.length === 1) this.plant(s, crops[0], pos);
+      else if (crops.length > 1) {
+        void this.hooks.chooseCrop(crops).then((crop) => {
+          if (crop && this.gardenProgress(s) < 0) this.plant(s, crop, pos);
+        });
+      }
       return;
     }
     if (k < 1) return;
+    const def = CROPS[s.crop ?? 'batata'];
     s.plantedAt = -1;
-    const seeds = 1 + (Math.random() < 0.4 ? 1 : 0);
-    this.hooks.inventory.add('batata_doce', 3);
-    this.hooks.inventory.add('semente', seeds);
+    const seeds = 1 + (Math.random() < def.extraSeedChance ? 1 : 0);
+    this.hooks.inventory.add(def.produce, def.amount);
+    this.hooks.inventory.add(def.seed, seeds);
     this.hooks.addXP(6);
     this.hooks.sound('pickup');
     this.hooks.burst(pos, '#c8573a', 14);
-    this.hooks.notify(`Colheita: 3 Batata-doce e ${seeds} Semente${seeds > 1 ? 's' : ''}`, 'item');
-    this.bus.emit('crop:harvested', { itemId: 'batata_doce', amount: 3 });
-    this.bus.emit('resource:gathered', { itemId: 'batata_doce', amount: 3 });
+    this.hooks.notify(`Colheita: ${def.amount} ${ITEMS[def.produce].name} e ${seeds} ${ITEMS[def.seed].name}`, 'item');
+    this.bus.emit('crop:harvested', { itemId: def.produce, amount: def.amount });
+    this.bus.emit('resource:gathered', { itemId: def.produce, amount: def.amount });
+  }
+
+  private plant(s: PlacedStructure, crop: CropId, pos: THREE.Vector3): void {
+    if (!this.hooks.inventory.remove(CROPS[crop].seed, 1)) return;
+    s.crop = crop;
+    s.plantedAt = this.hooks.playTime();
+    this.hooks.sound('leaves');
+    this.hooks.burst(pos, '#6b4a2e', 10);
+    this.hooks.notify(`${ITEMS[CROPS[crop].seed].name} plantada! Volte em alguns minutos para colher.`, 'success');
   }
 
   private updateGardenVisual(s: PlacedStructure, now: number): void {
     const k = this.gardenProgress(s, now);
-    const plant = s.model.plant;
-    const crop = s.model.crop;
-    if (plant) {
-      plant.visible = k >= 0;
-      const scale = k < 0 ? 0.01 : 0.15 + 0.85 * k;
-      plant.scale.set(scale, scale, scale);
+    const current = s.crop ?? 'batata';
+    const sets: Array<[CropId, { plant?: THREE.Object3D; crop?: THREE.Object3D }]> = [
+      ['batata', { plant: s.model.plant, crop: s.model.crop }],
+      ['milho', s.model.variants?.milho ?? {}],
+      ['abacaxi', s.model.variants?.abacaxi ?? {}],
+    ];
+    for (const [id, set] of sets) {
+      const active = id === current && k >= 0;
+      if (set.plant) {
+        set.plant.visible = active;
+        const scale = active ? 0.15 + 0.85 * k : 0.01;
+        set.plant.scale.set(scale, scale, scale);
+      }
+      if (set.crop) set.crop.visible = active && k >= 1;
     }
-    if (crop) crop.visible = k >= 1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fogueiras e chuva
+  // ---------------------------------------------------------------------------
+
+  private campfireAction(s: PlacedStructure): InteractAction {
+    if (s.lit) return { label: 'Cozinhar na fogueira', enabled: true };
+    if (this.hooks.raining() && !this.isSheltered(s.x, s.z)) {
+      return { label: 'Reacender fogueira', enabled: false, reason: 'Está chovendo: espere passar ou construa um telhado em cima' };
+    }
+    if (!this.hooks.inventory.has('madeira')) return { label: 'Reacender fogueira', enabled: false, reason: 'Requer 1 Madeira' };
+    return { label: 'Reacender fogueira (1 madeira)', enabled: true };
+  }
+
+  private relight(s: PlacedStructure): void {
+    if (!this.hooks.inventory.remove('madeira', 1)) return;
+    this.setLit(s, true);
+    s.wetness = 0;
+    this.hooks.sound('craft');
+    this.hooks.burst(new THREE.Vector3(s.x, s.y + 0.6, s.z), '#ffb347', 10);
+    this.hooks.notify('A fogueira voltou a queimar.');
+    this.bus.emit('campfire:lit', { id: s.id });
+  }
+
+  private setLit(s: PlacedStructure, lit: boolean): void {
+    s.lit = lit;
+    if (s.model.flames) s.model.flames.visible = lit;
+    if (s.light) s.light.enabled = lit;
+  }
+
+  private updateCampfireRain(s: PlacedStructure, dt: number): void {
+    if (!s.lit) return;
+    if (!this.hooks.raining() || this.isSheltered(s.x, s.z)) {
+      s.wetness = Math.max(0, (s.wetness ?? 0) - dt);
+      return;
+    }
+    s.wetness = (s.wetness ?? 0) + dt;
+    if (s.wetness < RAIN_TO_EXTINGUISH) return;
+    this.setLit(s, false);
+    this.hooks.burst(new THREE.Vector3(s.x, s.y + 0.8, s.z), '#9aa4ae', 12);
+    const p = this.hooks.playerPosition();
+    if (Math.hypot(p.x - s.x, p.z - s.z) < 45) {
+      this.hooks.sound('splash');
+      this.hooks.notify('A chuva apagou a fogueira! Reacenda quando parar (ou construa um telhado em cima).');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // Telhados modulares
   // ---------------------------------------------------------------------------
 
-  /** Cada telhado vira uma zona: ao entrar embaixo, os telhados próximos somem. */
+  /**
+   * Cada telhado vira uma zona: ao entrar embaixo, os telhados próximos somem.
+   * Embaixo de um piso do segundo andar, some tudo o que está daquele andar
+   * para cima (pisos, paredes, móveis e telhados), para a câmera enxergar.
+   */
   private rebuildRoofZones(): void {
     const roofs = this.structures.filter((s) => s.def.modular === 'telhado');
-    this.roofZones = roofs.map((r) => ({
+    const zones: CameraZone[] = roofs.map((r) => ({
       x: r.x,
       z: r.z,
       radius: 1.3,
       maxDistance: 3.6,
-      hide: roofs.filter((o) => Math.hypot(o.x - r.x, o.z - r.z) < 12).map((o) => o.model.root),
+      below: r.y,
+      hide: roofs.filter((o) => Math.hypot(o.x - r.x, o.z - r.z) < 12 && o.y >= r.y - 0.5).map((o) => o.model.root),
     }));
+    for (const f of this.structures) {
+      if (!f.upper) continue;
+      zones.push({
+        x: f.x,
+        z: f.z,
+        radius: 1.4,
+        maxDistance: 3.6,
+        below: f.y - 0.3,
+        hide: this.structures
+          .filter((o) => (o.def.modular || o.def.furniture) && o.y >= f.y - 0.05 && Math.hypot(o.x - f.x, o.z - f.z) < 12)
+          .map((o) => o.model.root),
+      });
+    }
+    this.roofZones = zones;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Portas
+  // ---------------------------------------------------------------------------
+
+  private addDoorCollider(s: PlacedStructure): Collider {
+    return this.collision.add({ kind: 'box', x: s.x, z: s.z, hw: 0.5, hd: 0.07, rot: s.rot, top: s.y + 2.15, tag: s.id });
+  }
+
+  toggleDoor(s: PlacedStructure): void {
+    s.doorOpen = !s.doorOpen;
+    if (s.doorOpen && s.doorCollider) {
+      this.collision.remove(s.doorCollider);
+      s.doorCollider = null;
+    } else if (!s.doorOpen && !s.doorCollider) {
+      s.doorCollider = this.addDoorCollider(s);
+    }
+    this.hooks.sound(s.doorOpen ? 'open' : 'close');
   }
 
   // ---------------------------------------------------------------------------
@@ -807,9 +1108,12 @@ export class BuildingSystem implements InteractableProvider {
   toJSON(): StructureSave[] {
     return this.structures.map((s) => {
       const save: StructureSave = { id: s.id, type: s.type, x: s.x, z: s.z, rot: s.rot };
-      if (s.def.modular) save.y = s.y;
+      if (s.def.modular || s.def.furniture) save.y = s.y;
+      if (s.upper) save.data = { upper: 1 };
+      if (s.doorOpen) save.data = { open: 1 };
       if (s.storage) save.data = Object.fromEntries(s.storage);
-      if (s.type === 'canteiro') save.data = { plantedAt: s.plantedAt ?? -1 };
+      if (s.type === 'canteiro') save.data = { plantedAt: s.plantedAt ?? -1, crop: s.crop ?? 'batata' };
+      if (s.type === 'fogueira' && s.lit === false) save.data = { lit: 0 };
       return save;
     });
   }
@@ -826,8 +1130,16 @@ export class BuildingSystem implements InteractableProvider {
   private baseHeight(type: StructureId, x: number, z: number, rot: number): number {
     const def = STRUCTURES[type];
     if (def.onWater) return WATER_LEVEL;
+    if (def.furniture || def.modular === 'escada') return this.floorTopAt(x, z, Infinity) ?? this.terrain.getHeight(x, z);
     if (type !== 'cabana' && !def.modular) return this.terrain.getHeight(x, z);
     return this.heightRange(x, z, def.footprint.w / 2, def.footprint.d / 2, rot).max;
+  }
+
+  /** Ângulo arredondado para o múltiplo de 90° mais próximo (0 a 2π). */
+  private snapQuarter(a: number): number {
+    const step = Math.PI / 2;
+    const full = Math.PI * 2;
+    return (((Math.round(a / step) * step) % full) + full) % full;
   }
 
   private snapAngle(a: number): number {

@@ -12,8 +12,10 @@ import { Landmarks, type LandmarkHooks } from './world/Landmarks';
 import { ResourceManager } from './world/ResourceNodes';
 import { Sky } from './world/Sky';
 import { TerrainSet } from './world/Terrain';
-import { AURORA_CENTER, ISLAND_SHAPES } from './world/islands';
+import { AURORA_CENTER, ECO_CENTER, ISLAND_SHAPES } from './world/islands';
 import { AuroraLandmarks } from './world/AuroraLandmarks';
+import { EcoLandmarks, type EcoHooks } from './world/EcoLandmarks';
+import { WeatherSystem } from './Weather';
 import { Water } from './world/Water';
 
 export type ProgressCallback = (fraction: number, label: string) => Promise<void>;
@@ -27,6 +29,7 @@ export class World {
   readonly terrain = new TerrainSet(ISLAND_SHAPES);
   readonly sky = new Sky();
   readonly dayNight: DayNight;
+  readonly weather = new WeatherSystem();
   water!: Water;
   resources!: ResourceManager;
   decorations!: Decorations;
@@ -37,6 +40,11 @@ export class World {
   auroraLandmarks: AuroraLandmarks | null = null;
   /** Avisado quando a Aurora começa a ser montada (o jogo cria a fauna dela). */
   onAuroraCreated: (() => void) | null = null;
+  /** Conteúdo da Ilha do Eco (capítulo 3, também criado sob demanda). */
+  ecoResources: ResourceManager | null = null;
+  ecoDecorations: Decorations | null = null;
+  ecoLandmarks: EcoLandmarks | null = null;
+  onEcoCreated: (() => void) | null = null;
 
   /** Feixe de luz que marca o objetivo da missão. */
   readonly questBeacon: THREE.Mesh;
@@ -68,6 +76,7 @@ export class World {
     this.scene.add(lights.group);
 
     this.dayNight = new DayNight(this.sky, this.sun, this.hemi, this.fog);
+    this.scene.add(this.weather.rainMesh);
 
     this.questBeacon = new THREE.Mesh(
       new THREE.CylinderGeometry(0.5, 0.9, 90, 10, 1, true),
@@ -134,7 +143,34 @@ export class World {
 
   /** Todos os gerenciadores de recursos (uma ilha cada). */
   get resourceManagers(): ResourceManager[] {
-    return this.auroraResources ? [this.resources, this.auroraResources] : [this.resources];
+    const list = [this.resources];
+    if (this.auroraResources) list.push(this.auroraResources);
+    if (this.ecoResources) list.push(this.ecoResources);
+    return list;
+  }
+
+  get ecoCreated(): boolean {
+    return this.ecoLandmarks !== null;
+  }
+
+  /** Cria a Ilha do Eco (mesma ideia da Aurora: o terreno aparece aos poucos). */
+  createEco(density: number, hooks: EcoHooks): void {
+    if (this.ecoLandmarks) return;
+    this.terrain.get('eco').generateHeights();
+    this.ecoResources = new ResourceManager(this.terrain, this.collision, this.windTime);
+    this.ecoResources.generate('eco');
+    this.ecoResources.onHit = this.resources.onHit;
+    this.scene.add(this.ecoResources.group);
+    this.interaction.addProvider(this.ecoResources);
+    this.ecoDecorations = new Decorations(this.terrain, this.windTime);
+    this.ecoDecorations.generate({ x: ECO_CENTER.x, z: ECO_CENTER.z, extent: 118, seed: 9 });
+    this.ecoDecorations.setDensity(density);
+    this.scene.add(this.ecoDecorations.group);
+    this.ecoLandmarks = new EcoLandmarks(this.terrain, this.collision, this.interaction, this.lights, hooks);
+    this.ecoLandmarks.build();
+    this.ecoLandmarks.applyFlags();
+    this.scene.add(this.ecoLandmarks.group);
+    this.onEcoCreated?.();
   }
 
   get auroraCreated(): boolean {
@@ -178,8 +214,10 @@ export class World {
 
   private applyFog(): void {
     const distance = this.menuView ? Math.max(this.renderDistance, 340) : this.renderDistance;
-    this.fog.near = distance * 0.3;
-    this.fog.far = distance;
+    // Chuva, tempestade e noites de névoa fecham a visão.
+    const factor = this.menuView ? 1 : this.weather.fogMultiplier;
+    this.fog.near = distance * 0.3 * factor;
+    this.fog.far = distance * factor;
   }
 
   setShadows(enabled: boolean, mapSize: number): void {
@@ -205,6 +243,12 @@ export class World {
     this.sky.follow(camera.position);
     if (simulate) this.dayNight.update(dt);
     else this.dayNight.apply();
+    // Clima por cima das cores do dia/noite.
+    this.weather.update(dt, elapsed, camera.position, simulate);
+    this.weather.applyVisuals({ sky: this.sky.uniforms, sun: this.sun, hemi: this.hemi, fog: this.fog });
+    this.water.setWaves(this.weather.waves);
+    this.sky.setCloudCover(this.weather.cover);
+    this.applyFog();
     this.landmarks.update(dt, elapsed);
 
     // Sol/lua acompanham o jogador para que as sombras fiquem sempre por perto.
@@ -218,6 +262,9 @@ export class World {
     const aurora = this.terrain.get('aurora');
     if (this.auroraLandmarks && !aurora.chunksDone) aurora.buildNextChunk();
     this.auroraLandmarks?.update(dt, elapsed, this.dayNight.night);
+    const eco = this.terrain.get('eco');
+    if (this.ecoLandmarks && !eco.chunksDone) eco.buildNextChunk();
+    this.ecoLandmarks?.update(dt, elapsed, focus);
 
     for (const mesh of this.terrain.chunks) {
       const sphere = mesh.geometry.boundingSphere!;

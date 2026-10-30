@@ -54,9 +54,17 @@ export interface SaveData {
     explored: string;
     /** Névoa do mapa da Ilha da Aurora. */
     exploredAurora?: string;
+    /** Névoa do mapa da Ilha do Eco. */
+    exploredEco?: string;
     nodes: Record<string, NodeSave>;
+    /** Marcadores colocados pelo jogador no mapa (c = índice da cor). */
+    pins?: Array<{ x: number; z: number; c: number }>;
+    /** Clima atual e segundos até a próxima mudança. */
+    weather?: { kind: string; timer: number; mist?: boolean };
   };
   stats: { gathered: number; crafted: number; built: number };
+  /** Raposa de estimação (posição, se está esperando) e frutas já dadas. */
+  pet?: { x?: number; z?: number; stay?: boolean; tameProgress: number };
 }
 
 /** Resumo exibido no menu inicial ("Continuar"). */
@@ -90,6 +98,9 @@ export function migrateSave(raw: Record<string, unknown>): Record<string, unknow
 }
 
 /** Verifica se os dados lidos têm o formato esperado. Retorna null se estiverem corrompidos. */
+/** Máximo de marcadores no mapa. */
+export const MAX_PINS = 24;
+
 export function validateSave(input: unknown): SaveData | null {
   if (!isObj(input)) return null;
   const data = migrateSave(input);
@@ -157,8 +168,28 @@ export function validateSave(input: unknown): SaveData | null {
       regions: Array.isArray(world.regions) ? world.regions.filter((r): r is string => typeof r === 'string') : [],
       explored: typeof world.explored === 'string' ? world.explored : '',
       exploredAurora: typeof world.exploredAurora === 'string' ? world.exploredAurora : '',
+      ...(typeof world.exploredEco === 'string' && { exploredEco: world.exploredEco }),
+      ...(Array.isArray(world.pins) && {
+        pins: world.pins
+            .filter((p): p is { x: number; z: number; c: number } => isObj(p) && isNum(p.x) && isNum(p.z) && isNum(p.c))
+            .slice(0, MAX_PINS)
+            .map((p) => ({ x: p.x, z: p.z, c: Math.max(0, Math.min(3, Math.floor(p.c))) })),
+      }),
+      ...(isObj(world.weather) &&
+        typeof world.weather.kind === 'string' &&
+        isNum(world.weather.timer) && {
+          weather: { kind: world.weather.kind, timer: world.weather.timer, ...(world.weather.mist === true ? { mist: true } : {}) },
+        }),
       nodes,
     },
+    ...(isObj(data.pet) && {
+      pet: {
+        ...(isNum(data.pet.x) && { x: data.pet.x }),
+        ...(isNum(data.pet.z) && { z: data.pet.z }),
+        stay: data.pet.stay === true,
+        tameProgress: isNum(data.pet.tameProgress) ? Math.max(0, Math.floor(data.pet.tameProgress)) : 0,
+      },
+    }),
     stats: {
       gathered: isNum(stats.gathered) ? stats.gathered : 0,
       crafted: isNum(stats.crafted) ? stats.crafted : 0,

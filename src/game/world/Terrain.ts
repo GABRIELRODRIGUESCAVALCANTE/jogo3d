@@ -21,7 +21,7 @@ export interface HeightField {
   getSlope(x: number, z: number): number;
 }
 
-export type IslandId = 'principal' | 'aurora';
+export type IslandId = 'principal' | 'aurora' | 'eco';
 
 /**
  * Descrição de uma ilha: onde fica, tamanho, resolução e a função que dá a

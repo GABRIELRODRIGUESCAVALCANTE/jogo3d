@@ -127,6 +127,47 @@ export const ICONS: Record<string, string> = {
     <path d="M5 20c2-8 13-13 21-8 4 3 1 11-7 13-7 2-15 2-14-5z" fill="#8a3e22"/>
     <path d="M12 16c3-2 7-2 9 0-3 3-6 3-9 0z" fill="#ffcf5c"/>
     <path d="M12 9c-1-2 1-3 0-5M18 9c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.4" fill="none" stroke-linecap="round"/>`),
+  semente_milho: svg(`
+    <ellipse cx="10" cy="18" rx="3.5" ry="4.5" fill="#f2c53d"/>
+    <ellipse cx="17" cy="21" rx="3.5" ry="4.5" fill="#e8b22c"/>
+    <ellipse cx="22" cy="14" rx="3.5" ry="4.5" fill="#f5cf55"/>`),
+  milho: svg(`
+    <path d="M16 4c5 0 7 6 6 13s-3 11-6 11-5-4-6-11 1-13 6-13z" fill="#f5c935"/>
+    <path d="M13 9h6M12 13h8M12 17h8M13 21h6" stroke="#d9a520" stroke-width="1.4"/>
+    <path d="M10 27c-3-5-4-10-3-15 3 4 5 9 6 15zM22 27c3-5 4-10 3-15-3 4-5 9-6 15z" fill="#6cbf4a"/>`),
+  milho_assado: svg(`
+    <path d="M16 4c5 0 7 6 6 13s-3 11-6 11-5-4-6-11 1-13 6-13z" fill="#d99a2b"/>
+    <path d="M13 9h6M12 13h8M12 17h8M13 21h6" stroke="#8a5a14" stroke-width="1.6"/>
+    <path d="M9 7c-1-2 1-3 0-5M23 7c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.4" fill="none" stroke-linecap="round"/>`),
+  muda_abacaxi: svg(`
+    <path d="M16 28c-4 0-6-1-6-3h12c0 2-2 3-6 3z" fill="#8a5a2e"/>
+    <path d="M16 25L9 8l5 9 2-13 2 13 5-9z" fill="#4caf50"/>
+    <path d="M16 25l-3-12 3 6 3-6z" fill="#7bd06a"/>`),
+  abacaxi: svg(`
+    <ellipse cx="16" cy="21" rx="7" ry="8.5" fill="#f2b632"/>
+    <path d="M11 15l10 12M21 15l-10 12M9 20l7 8M23 20l-7 8" stroke="#c98a1c" stroke-width="1.3"/>
+    <path d="M16 13l-5-10 4 5 1-6 1 6 4-5z" fill="#4caf50"/>`),
+  salada_tropical: svg(`
+    <path d="M4 16h24c0 7-5 12-12 12S4 23 4 16z" fill="#e9dcc0" stroke="#b9a27a" stroke-width="1.5"/>
+    <circle cx="11" cy="14" r="3.5" fill="#ff6f61"/>
+    <rect x="15" y="10" width="6" height="6" rx="1.5" fill="#f2b632"/>
+    <circle cx="22" cy="14" r="3" fill="#ffa94d"/>
+    <path d="M7 13c2-2 4-2 6 0" stroke="#4caf50" stroke-width="2" fill="none"/>`),
+  ensopado: svg(`
+    <path d="M5 14h22l-2 12H7z" fill="#5b6470"/>
+    <path d="M5 14h22" stroke="#3b424b" stroke-width="2.4" stroke-linecap="round"/>
+    <ellipse cx="16" cy="14.5" rx="10" ry="2.2" fill="#d9822b"/>
+    <circle cx="12" cy="14" r="1.6" fill="#f5c935"/><circle cx="19" cy="14.4" r="1.6" fill="#c8573a"/>
+    <path d="M12 9c-1-2 1-3 0-5M18 9c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.4" fill="none" stroke-linecap="round"/>`),
+  peixe_dourado: svg(`
+    <circle cx="15" cy="16" r="12" fill="#ffe066" opacity="0.25"/>
+    <path d="M4 16c5-7 14-8 20-2l5-5v14l-5-5c-6 6-15 5-20-2z" fill="#ffc533"/>
+    <path d="M4 16c5-3 12-4 18 0-6 3-13 3-18 0z" fill="#fff0a0"/>
+    <circle cx="9" cy="14" r="1.5" fill="#123"/>`),
+  dourado_grelhado: svg(`
+    <path d="M4 17c5-7 14-8 20-2l5-5v14l-5-5c-6 6-15 5-20-2z" fill="#e0a12a"/>
+    <path d="M10 14l2 6M15 13l2 7M20 14l1 5" stroke="#8a5a14" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M23 5l1 2 2 .5-2 .5-1 2-1-2-2-.5 2-.5z" fill="#fff6c2"/>`),
   bau: svg(`
     <rect x="4" y="13" width="24" height="14" rx="2" fill="#9a6a3f"/>
     <path d="M4 13c0-6 24-6 24 0z" fill="#b98552"/>
@@ -157,6 +198,24 @@ export const ICONS: Record<string, string> = {
     <path d="M16 4l9 15h-9z" fill="#f4ead2"/>
     <path d="M15 7l-8 12h8z" fill="#ffd9a0"/>
     <path d="M2 28c4-2 7 2 11 0s7 2 11 0 5 2 6 0" stroke="#3fb0e6" stroke-width="2" fill="none"/>`),
+  escada: svg(`
+    <path d="M5 27h6v-5h5v-5h5v-5h5V7h2v22H5z" fill="#c4925e" stroke="#7a5232" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M8 22L26 6" stroke="#7a5232" stroke-width="2" stroke-linecap="round"/>`),
+  mesa: svg(`
+    <rect x="4" y="11" width="24" height="4" rx="1" fill="#b98552"/>
+    <path d="M7 15v12M25 15v12M11 15v8M21 15v8" stroke="#7a5232" stroke-width="2.4" stroke-linecap="round"/>`),
+  cadeira: svg(`
+    <path d="M10 4v12h13" stroke="#9a6a3f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="9" y="15" width="15" height="3.5" rx="1" fill="#b98552"/>
+    <path d="M11 19v9M22 19v9" stroke="#7a5232" stroke-width="2.4" stroke-linecap="round"/>`),
+  tapete: svg(`
+    <path d="M3 21l13-7 13 7-13 7z" fill="#c9573c"/>
+    <path d="M8 21l8-4.3 8 4.3-8 4.3z" fill="#e9c46a"/>
+    <path d="M12 21l4-2 4 2-4 2z" fill="#2a9d8f"/>`),
+  vaso: svg(`
+    <path d="M10 18h12l-2 10h-8z" fill="#c06a3e"/>
+    <path d="M16 18V9M13 18l-3-7M19 18l3-6" stroke="#4caf50" stroke-width="1.6"/>
+    <circle cx="16" cy="8" r="2.6" fill="#ff6f91"/><circle cx="10" cy="10" r="2.2" fill="#ffd166"/><circle cx="22" cy="11" r="2.2" fill="#9b5de5"/>`),
   telhado: svg(`
     <path d="M2 20L16 7l14 13z" fill="#d9b45a"/>
     <path d="M6 17h20M10 13h12" stroke="#a8843a" stroke-width="1.6"/>
@@ -189,6 +248,40 @@ export const ICONS: Record<string, string> = {
   raio: svg(`<path d="M18 2L7 18h8l-2 12 12-17h-8z" fill="#7bd88f" stroke="#3f9e57" stroke-width="1.5" stroke-linejoin="round"/>`),
   sol: svg(`<circle cx="16" cy="16" r="6.5" fill="#ffd166"/><path d="M16 3v4M16 25v4M3 16h4M25 16h4M6.8 6.8l2.8 2.8M22.4 22.4l2.8 2.8M6.8 25.2l2.8-2.8M22.4 9.6l2.8-2.8" stroke="#ffd166" stroke-width="2.4" stroke-linecap="round"/>`),
   lua: svg(`<path d="M21 4a12 12 0 1 0 7 17A10 10 0 0 1 21 4z" fill="#dfe7ff"/><circle cx="13" cy="15" r="1.6" fill="#b8c4ea"/><circle cx="17" cy="22" r="2" fill="#b8c4ea"/>`),
+  nuvem: svg(`<path d="M9 24a6 6 0 0 1-.6-12A8 8 0 0 1 23.5 10 6.5 6.5 0 0 1 24 24z" fill="#d6dde6" stroke="#8e9aa8" stroke-width="1.5" stroke-linejoin="round"/>`),
+  chuva: svg(`<path d="M9 19a5.5 5.5 0 0 1-.6-11A7.5 7.5 0 0 1 22.6 6.5 6 6 0 0 1 23 19z" fill="#aeb9c6" stroke="#6f7c8b" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 23l-1.5 4M16 23l-1.5 4M22 23l-1.5 4" stroke="#6fb7ff" stroke-width="2.2" stroke-linecap="round"/>`),
+  tempestade: svg(`<path d="M9 18a5.5 5.5 0 0 1-.6-11A7.5 7.5 0 0 1 22.6 5.5 6 6 0 0 1 23 18z" fill="#7d8794" stroke="#4a525e" stroke-width="1.5" stroke-linejoin="round"/><path d="M17 17l-4 7h4l-2 6 6-8h-4l2-5z" fill="#ffd166" stroke="#c99a2e" stroke-width="1" stroke-linejoin="round"/><path d="M9 22l-1.2 3.5M25 21l-1.2 3.5" stroke="#6fb7ff" stroke-width="2" stroke-linecap="round"/>`),
+  fogueira_apagada: svg(`<path d="M7 26l18-5M7 21l18 5" stroke="#6b4a2f" stroke-width="3" stroke-linecap="round"/><path d="M14 17c-2-3 1-5 0-9M19 16c-1-2 1-4 0-6" stroke="#9aa4ae" stroke-width="2" stroke-linecap="round" fill="none"/>`),
+  raposa: svg(`<path d="M6 6l5 7h10l5-7-1 11c0 6-4 10-9 10s-9-4-9-10z" fill="#e8743b"/><path d="M11 20c1.5 3 3 4 5 4s3.5-1 5-4c-2 1-3.5 1.5-5 1.5S13 21 11 20z" fill="#fff4e6"/><circle cx="12.5" cy="17" r="1.4" fill="#2b2b2b"/><circle cx="19.5" cy="17" r="1.4" fill="#2b2b2b"/><circle cx="16" cy="23" r="1.3" fill="#2b2b2b"/>`),
+  papagaio: svg(`
+    <path d="M12 30l2-7M17 30l-1-7" stroke="#5a4630" stroke-width="1.6" stroke-linecap="round"/>
+    <ellipse cx="15" cy="17" rx="7" ry="9" fill="#3fbf4a"/>
+    <path d="M10 15c-3 4-3 9 1 13l3-9z" fill="#2f8fdc"/>
+    <circle cx="17" cy="9" r="6" fill="#e63946"/>
+    <path d="M22 8c4 0 5 3 4 6-1-2-3-2-4-1z" fill="#ffd166"/>
+    <circle cx="19" cy="8" r="1.8" fill="#fff"/><circle cx="19.5" cy="8" r="0.9" fill="#111"/>`),
+  diario: svg(`
+    <path d="M4 7c4-2 8-2 12 1v19c-4-3-8-3-12-1z" fill="#f6ecd2" stroke="#7a3f2a" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M28 7c-4-2-8-2-12 1v19c4-3 8-3 12-1z" fill="#f1e6c8" stroke="#7a3f2a" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M7 12h6M7 16h6M19 12h6M19 16h6M19 20h4" stroke="#b9a27a" stroke-width="1.2"/>`),
+  iara: svg(`
+    <rect x="9" y="19" width="14" height="11" rx="2" fill="#2f6fb0"/>
+    <rect x="9" y="18" width="14" height="3" fill="#d62828"/>
+    <rect x="10" y="8" width="12" height="11" rx="2" fill="#c68b59"/>
+    <path d="M9 10h14v-2H9z" fill="#3d2b1f"/>
+    <path d="M5 8h22v2H5zM10 3h12v5H10z" fill="#1f2a44"/>
+    <rect x="15" y="4" width="2" height="2" fill="#ffd166"/>
+    <rect x="12.5" y="12" width="2" height="2" fill="#111"/><rect x="17.5" y="12" width="2" height="2" fill="#111"/>`),
+  guardia: svg(`
+    <circle cx="16" cy="16" r="14" fill="#bfefff" opacity="0.25"/>
+    <path d="M16 12l7 18H9z" fill="#e6fbff"/>
+    <circle cx="16" cy="9" r="4" fill="#ffffff"/>
+    <ellipse cx="16" cy="4.5" rx="5" ry="1.4" fill="none" stroke="#9fe8ff" stroke-width="1.4"/>
+    <path d="M6 17h20" stroke="#e6fbff" stroke-width="2" stroke-linecap="round"/>`),
+  sino: svg(`
+    <path d="M7 4h18" stroke="#7a5232" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M16 5c-5 0-7 4-7 9v6l-3 4h20l-3-4v-6c0-5-2-9-7-9z" fill="#d9a441" stroke="#8a5a14" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="16" cy="26.5" r="2.2" fill="#8a5a14"/>`),
   bussola: svg(`<circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M16 6l3.5 10H12.5z" fill="#ff6b6b"/><path d="M16 26l-3.5-10h7z" fill="currentColor"/>`),
 };
 

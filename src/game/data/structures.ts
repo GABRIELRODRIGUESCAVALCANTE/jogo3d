@@ -18,15 +18,22 @@ export type StructureId =
   | 'parede_porta'
   | 'parede_janela'
   | 'telhado'
+  | 'escada'
+  | 'mesa'
+  | 'cadeira'
+  | 'tapete'
+  | 'vaso'
   | 'barco';
 
 /**
  * Peças modulares se encaixam numa grade de 2 m:
  * - piso: ocupa uma célula;
  * - parede: fica na borda entre duas células;
- * - telhado: ocupa uma célula, apoiado no topo das paredes.
+ * - telhado: ocupa uma célula, apoiado no topo das paredes;
+ * - escada: ocupa uma célula e sobe a altura de um andar.
+ * Um piso construído onde já há paredes em volta vira o piso do segundo andar.
  */
-export type ModularKind = 'piso' | 'parede' | 'telhado';
+export type ModularKind = 'piso' | 'parede' | 'telhado' | 'escada';
 
 /** Tamanho da célula da grade de construção modular (metros). */
 export const GRID = 2;
@@ -56,7 +63,9 @@ export interface StructureDef {
   /** Peça modular (encaixa na grade). */
   modular?: ModularKind;
   /** Categoria no menu de construção. */
-  group: 'basico' | 'modular' | 'decoracao';
+  group: 'basico' | 'modular' | 'moveis' | 'decoracao';
+  /** Móvel: pode ficar em cima dos pisos (em qualquer andar). */
+  furniture?: boolean;
   /** Só pode ser construído depois de um marcador da história (ex.: farol aceso). */
   requiresFlag?: { flag: string; reason: string };
   /** Construído sobre a água (barco). */
@@ -243,6 +252,76 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     modular: 'telhado',
     group: 'modular',
   },
+  escada: {
+    id: 'escada',
+    name: 'Escada',
+    description: 'Sobe um andar. Coloque dentro da casa e construa o piso do segundo andar ao lado dela.',
+    icon: 'escada',
+    cost: { madeira: 8, corda: 1 },
+    minLevel: 3,
+    footprint: { w: 2, d: 2 },
+    maxSlope: 1.6,
+    xp: 8,
+    solid: true,
+    modular: 'escada',
+    group: 'modular',
+  },
+  mesa: {
+    id: 'mesa',
+    name: 'Mesa',
+    description: 'Uma mesa de madeira para a sua casa.',
+    icon: 'mesa',
+    cost: { madeira: 4 },
+    minLevel: 2,
+    footprint: { w: 1.4, d: 0.9 },
+    maxSlope: 0.6,
+    xp: 4,
+    solid: true,
+    group: 'moveis',
+    furniture: true,
+  },
+  cadeira: {
+    id: 'cadeira',
+    name: 'Cadeira',
+    description: 'Combina com a mesa.',
+    icon: 'cadeira',
+    cost: { madeira: 2 },
+    minLevel: 2,
+    footprint: { w: 0.55, d: 0.55 },
+    maxSlope: 0.6,
+    xp: 2,
+    solid: true,
+    group: 'moveis',
+    furniture: true,
+  },
+  tapete: {
+    id: 'tapete',
+    name: 'Tapete Trançado',
+    description: 'Tapete de fibras. Dá para colocar móveis em cima.',
+    icon: 'tapete',
+    cost: { fibra: 6 },
+    minLevel: 2,
+    footprint: { w: 1.8, d: 1.2 },
+    maxSlope: 0.6,
+    xp: 2,
+    solid: false,
+    group: 'moveis',
+    furniture: true,
+  },
+  vaso: {
+    id: 'vaso',
+    name: 'Vaso de Flores',
+    description: 'Flores da ilha num vaso de barro.',
+    icon: 'vaso',
+    cost: { pedra: 2, fibra: 1 },
+    minLevel: 2,
+    footprint: { w: 0.5, d: 0.5 },
+    maxSlope: 0.8,
+    xp: 2,
+    solid: true,
+    group: 'moveis',
+    furniture: true,
+  },
   barco: {
     id: 'barco',
     name: 'Barco a Vela',
@@ -273,6 +352,11 @@ export const STRUCTURE_ORDER: StructureId[] = [
   'parede_porta',
   'parede_janela',
   'telhado',
+  'escada',
+  'mesa',
+  'cadeira',
+  'tapete',
+  'vaso',
   'cerca',
   'caminho',
   'lanterna',

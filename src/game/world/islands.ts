@@ -5,6 +5,8 @@
  * - Ilha da Aurora (a nordeste, a ~600 m): vegetação azulada, colina central
  *   com o Observatório dos Lumeni e três pilares de cristal. Ela só é montada
  *   quando o jogador se aproxima (carregamento sob demanda).
+ * - Ilha do Eco (ao sul, a ~370 m): coberta de névoa, com o acampamento de
+ *   Iara, três sinos antigos e o Templo do Eco. Também é montada sob demanda.
  */
 import * as THREE from 'three';
 import { lerp, smoothstep } from '../../core/math';
@@ -170,4 +172,96 @@ export const AURORA_ISLAND: IslandShape = {
   grass: { light: '#7fe0b0', mid: '#4fbf9a', dark: '#2f9a86' },
 };
 
-export const ISLAND_SHAPES: IslandShape[] = [MAIN_ISLAND, AURORA_ISLAND];
+// ---------------------------------------------------------------------------
+// Ilha do Eco (capítulo 3)
+// ---------------------------------------------------------------------------
+
+export const ECO_CENTER: Place = { x: -150, z: 520 };
+const E = ECO_CENTER;
+
+/** Lugares importantes da Ilha do Eco (a praia de chegada fica ao norte). */
+export const ECO_PLACES = {
+  center: E,
+  beach: { x: E.x + 10, z: E.z - 88 },
+  camp: { x: E.x + 24, z: E.z - 70 },
+  temple: { x: E.x, z: E.z + 4 },
+  bellWest: { x: E.x - 56, z: E.z + 8 },
+  bellEast: { x: E.x + 54, z: E.z - 14 },
+  bellSouth: { x: E.x + 8, z: E.z + 60 },
+} satisfies Record<string, Place>;
+
+const EP = ECO_PLACES;
+const ECO_PATHS: Place[][] = [
+  [EP.beach, EP.camp, { x: E.x + 14, z: E.z - 36 }, EP.temple],
+  [EP.temple, EP.bellWest],
+  [EP.temple, EP.bellEast],
+  [EP.temple, EP.bellSouth],
+];
+
+export function ecoPathDistance(x: number, z: number): number {
+  let best = Infinity;
+  for (const path of ECO_PATHS) {
+    for (let i = 0; i < path.length - 1; i++) best = Math.min(best, distanceToSegment(x, z, path[i], path[i + 1]));
+  }
+  return best;
+}
+
+function ecoRaw(x: number, z: number, noise: SimplexNoise2D): number {
+  const lx = x - E.x;
+  const lz = z - E.z;
+  const nx = lx / 104;
+  const nz = lz / 98;
+  let d = Math.sqrt(nx * nx + nz * nz);
+  d += noise.fbm(x * 0.013 - 5, z * 0.013 + 2, 3) * 0.15;
+  // Praia larga ao norte (de frente para a ilha principal).
+  const beachWidth = lerp(0.05, 0.16, smoothstep(0, 1, -lz / 90));
+  const c = 0.92 - d;
+  let h: number;
+  if (c < 0) h = Math.max(-11, c * 70);
+  else if (c < beachWidth) h = (c / beachWidth) * 1.3;
+  else {
+    const inland = c - beachWidth;
+    const hills = noise.fbm(x * 0.028, z * 0.028, 4) * 0.5 + 0.5;
+    h = 1.3 + smoothstep(0, 0.2, inland) * 2.4 + hills * 6 * smoothstep(0.02, 0.24, inland);
+  }
+  // Planalto do templo no meio e um morrinho para cada sino.
+  const plateau = Math.exp(-((lx - 0) ** 2 + (lz - 4) ** 2) / (2 * 28 ** 2)) * 14;
+  const mounds = [EP.bellWest, EP.bellEast, EP.bellSouth].reduce(
+    (sum, p) => sum + Math.exp(-((x - p.x) ** 2 + (z - p.z) ** 2) / (2 * 11 ** 2)) * 4,
+    0,
+  );
+  return h + (plateau + mounds) * smoothstep(-0.05, 0.08, c);
+}
+
+/** Onde nada nasce no Eco (marcos, acampamento e chegada pela praia). */
+export const ECO_KEEP_CLEAR: Array<Place & { radius: number }> = [
+  { ...EP.temple, radius: 18 },
+  { ...EP.beach, radius: 10 },
+  { ...EP.camp, radius: 9 },
+  { ...EP.bellWest, radius: 7 },
+  { ...EP.bellEast, radius: 7 },
+  { ...EP.bellSouth, radius: 7 },
+];
+
+export const ECO_ISLAND: IslandShape = {
+  id: 'eco',
+  name: 'Ilha do Eco',
+  cx: E.x,
+  cz: E.z,
+  size: 256,
+  segments: 104,
+  seed: WORLD_SEED + 202,
+  raw: ecoRaw,
+  flatten: [
+    { x: EP.temple.x, z: EP.temple.z, radius: 16, raise: 0.4 },
+    { x: EP.beach.x, z: EP.beach.z, radius: 12, height: 0.9 },
+    { x: EP.camp.x, z: EP.camp.z, radius: 8 },
+    { x: EP.bellWest.x, z: EP.bellWest.z, radius: 6 },
+    { x: EP.bellEast.x, z: EP.bellEast.z, radius: 6 },
+    { x: EP.bellSouth.x, z: EP.bellSouth.z, radius: 6 },
+  ],
+  pathDistance: ecoPathDistance,
+  grass: { light: '#a6c98a', mid: '#7fa86c', dark: '#5e8a5a' },
+};
+
+export const ISLAND_SHAPES: IslandShape[] = [MAIN_ISLAND, AURORA_ISLAND, ECO_ISLAND];
