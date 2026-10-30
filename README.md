@@ -83,7 +83,10 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
 - **Fome (saciedade)**: diminui com o tempo; com fome a energia volta devagar, faminto ela não volta.
 - **Durabilidade das ferramentas** (machado, picareta, vara de pesca e a tocha, que queima enquanto acesa).
 - **Pesca** com minijogo (lançar, esperar a boia afundar e puxar na hora certa) perto dos cardumes.
-- **Horta**: sementes do capim alto, canteiro, crescimento em tempo de jogo e colheita de batatas-doces.
+- **Horta**: canteiro com **batata-doce**, **milho** (sementes raras no capim) e **abacaxi** (mudas que
+  caem dos arbustos de frutas); com mais de um tipo de semente, o jogo pergunta o que plantar.
+- **Cozinha**: milho assado, salada tropical, ensopado da ilha e o raro **Peixe Dourado**, que só morde
+  a isca à noite (mais ainda na chuva) e vira o Dourado Grelhado.
 - **Baú de armazenamento** para guardar itens.
 - **Construção modular** em grade de 2 m: piso, paredes (lisa, com porta, com janela) e telhado de palha.
 - **Barco a vela** (depois de acender o farol): construa na água rasa, embarque e navegue pelo mar.
@@ -95,7 +98,7 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
 - Inventário visual, comida que restaura energia e o bônus "Bem alimentado".
 - Fabricação: corda, machado, picareta, tocha, vara de pesca e comidas assadas (com estações: bancada e fogueira).
 - Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, baú, canteiro, peças modulares, cerca, caminho e lanterna.
-- 25 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 6 opcionais, com recompensas e finais.
+- 27 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 8 opcionais, com recompensas e finais.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
 - Ciclo de dia e noite (sol, lua, estrelas), luzes de fogueiras, lanternas e tocha; dormir na cabana pula a noite.

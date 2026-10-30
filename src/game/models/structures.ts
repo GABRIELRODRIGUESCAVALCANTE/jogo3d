@@ -18,6 +18,8 @@ export interface StructureModel {
   plant?: THREE.Object3D;
   /** Batatas aparecendo quando a planta está pronta para colher. */
   crop?: THREE.Object3D;
+  /** Outras plantas da horta (milho, abacaxi): muda e colheita de cada uma. */
+  variants?: Record<string, { plant: THREE.Object3D; crop: THREE.Object3D }>;
 }
 
 const WOOD = '#9a6a3f';
@@ -164,7 +166,63 @@ function createGardenBed(): StructureModel {
   }
   const crop = mesh(merge(tubers));
   root.add(crop);
-  return { root, plant, crop };
+  return { root, plant, crop, variants: { milho: createCornPlants(root), abacaxi: createPineapplePlants(root) } };
+}
+
+/** Pés de milho: talos altos com folhas compridas; espigas amarelas quando prontos. */
+function createCornPlants(root: THREE.Group): { plant: THREE.Object3D; crop: THREE.Object3D } {
+  const stalks: THREE.BufferGeometry[] = [];
+  const cobs: THREE.BufferGeometry[] = [];
+  for (const [x, z] of [
+    [-0.45, -0.55],
+    [0.4, -0.5],
+    [-0.4, 0.05],
+    [0.45, 0.05],
+    [-0.42, 0.6],
+    [0.4, 0.58],
+  ]) {
+    stalks.push(part(new THREE.CylinderGeometry(0.035, 0.05, 1.6, 5), '#7dbb4a', { pos: [x, 0.8, z] }));
+    for (let k = 0; k < 3; k++) {
+      const leaf = new THREE.BoxGeometry(0.06, 0.02, 0.7);
+      leaf.translate(0, 0, 0.3);
+      leaf.rotateX(-0.5);
+      leaf.rotateY((k / 3) * Math.PI * 2 + x * 3);
+      leaf.translate(x, 0.45 + k * 0.38, z);
+      stalks.push(paintLeaf(leaf, k + 1));
+    }
+    stalks.push(part(new THREE.ConeGeometry(0.06, 0.25, 4), '#d9c27a', { pos: [x, 1.7, z] }));
+    cobs.push(part(new THREE.CylinderGeometry(0.06, 0.05, 0.3, 6), '#f5c935', { pos: [x + 0.07, 0.95, z], rot: [0, 0, -0.4] }));
+  }
+  const plant = mesh(merge(stalks));
+  plant.position.y = 0.2;
+  const crop = mesh(merge(cobs));
+  crop.position.y = 0.2;
+  root.add(plant, crop);
+  return { plant, crop };
+}
+
+/** Abacaxis: rosetas de folhas pontudas e, quando prontos, a fruta no meio. */
+function createPineapplePlants(root: THREE.Group): { plant: THREE.Object3D; crop: THREE.Object3D } {
+  const leaves: THREE.BufferGeometry[] = [];
+  const fruits: THREE.BufferGeometry[] = [];
+  for (const z of [-0.5, 0.5]) {
+    for (let k = 0; k < 8; k++) {
+      const leaf = new THREE.ConeGeometry(0.05, 0.7, 3);
+      leaf.translate(0, 0.35, 0);
+      leaf.rotateZ(0.7 + (k % 2) * 0.25);
+      leaf.rotateY((k / 8) * Math.PI * 2);
+      leaf.translate(0, 0, z);
+      leaves.push(part(leaf, k % 2 ? '#3f8f5a' : '#4fa66a', { seed: k }));
+    }
+    fruits.push(part(new THREE.IcosahedronGeometry(0.17, 0), '#f2b632', { pos: [0, 0.32, z], scale: [1, 1.4, 1] }));
+    fruits.push(part(new THREE.ConeGeometry(0.1, 0.25, 5), '#4caf50', { pos: [0, 0.65, z] }));
+  }
+  const plant = mesh(merge(leaves));
+  plant.position.y = 0.2;
+  const crop = mesh(merge(fruits));
+  crop.position.y = 0.2;
+  root.add(plant, crop);
+  return { plant, crop };
 }
 
 function paintLeaf(geometry: THREE.BufferGeometry, seed: number): THREE.BufferGeometry {

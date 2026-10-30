@@ -6,6 +6,7 @@
  *   1. a linha é lançada e a boia cai na água;
  *   2. depois de alguns segundos, a boia afunda: "Puxe agora!";
  *   3. apertar E (ou o botão de interagir) a tempo pega o peixe.
+ * À noite (e um pouco mais na chuva) pode vir um Peixe Dourado, raro.
  * Andar cancela a pesca.
  */
 import * as THREE from 'three';
@@ -28,6 +29,8 @@ export interface FishingHooks {
   sound(name: SoundName): void;
   splash(position: THREE.Vector3): void;
   addXP(amount: number): void;
+  /** Chance de fisgar um Peixe Dourado (à noite e na chuva). */
+  rareChance(): number;
 }
 
 /** Tempo para reagir quando o peixe morde. */
@@ -130,12 +133,13 @@ export class FishingSystem implements InteractableProvider {
   /** Jogador apertou interagir durante a pesca. */
   press(): void {
     if (this.state === 'bite') {
-      const item: ItemId = 'peixe';
+      const rare = Math.random() < this.hooks.rareChance();
+      const item: ItemId = rare ? 'peixe_dourado' : 'peixe';
       this.hooks.give(item, 1);
-      this.hooks.addXP(4);
-      this.hooks.sound('pickup');
+      this.hooks.addXP(rare ? 20 : 4);
+      this.hooks.sound(rare ? 'discover' : 'pickup');
       this.hooks.splash(this.bobber.position);
-      this.hooks.notify('Você pescou um peixe!');
+      this.hooks.notify(rare ? 'Que sorte! Um Peixe Dourado, que só aparece à noite!' : 'Você pescou um peixe!');
       this.bus.emit('fish:caught', { itemId: item });
       this.bus.emit('resource:gathered', { itemId: item, amount: 1 });
       this.stop();

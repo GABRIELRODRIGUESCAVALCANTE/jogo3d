@@ -16,6 +16,7 @@ import type { SoundName } from '../core/AudioManager';
 import { boxesOverlap, circleOverlapsBox, type Collider, type CollisionWorld } from './Collision';
 import { ITEMS, isItemId, type ItemBundle, type ItemId } from './data/items';
 import type { StationId } from './data/recipes';
+import { CROP_ORDER, CROPS, isCropId, type CropId } from './data/crops';
 import { GRID, STRUCTURES, WALL_HEIGHT, isStructureId, type StructureDef, type StructureId } from './data/structures';
 import type { GameEventBus, NotifyKind } from './events';
 import type { InteractAction, Interactable, InteractableProvider } from './InteractionSystem';
@@ -27,9 +28,6 @@ import type { CameraZone } from './world/Landmarks';
 import { PROTECTED_ZONES, WATER_LEVEL } from './world/layout';
 import type { ResourceManager } from './world/ResourceNodes';
 import type { HeightField } from './world/Terrain';
-
-/** Segundos de jogo para a batata-doce crescer no canteiro. */
-export const CROP_GROW_SECONDS = 240;
 
 export interface BuildingHooks {
   inventory: Inventory;
@@ -50,6 +48,8 @@ export interface BuildingHooks {
   boardBoat(structure: PlacedStructure): void;
   /** Está chovendo forte o bastante para apagar fogueiras. */
   raining(): boolean;
+  /** Pergunta ao jogador o que plantar (quando há mais de um tipo de semente). */
+  chooseCrop(options: CropId[]): Promise<CropId | null>;
 }
 
 export interface PlacedStructure {
@@ -71,6 +71,8 @@ export interface PlacedStructure {
   storage?: Map<ItemId, number>;
   /** Momento (tempo de jogo) em que algo foi plantado; -1 = canteiro vazio. */
   plantedAt?: number;
+  /** O que está plantado no canteiro. */
+  crop?: CropId;
   /** Animação da tampa do baú (0 fechado, 1 aberto). */
   lidOpen?: number;
   /** Barco com o jogador a bordo (não pode ser removido). */
@@ -623,6 +625,7 @@ export class BuildingSystem implements InteractableProvider {
         break;
       case 'canteiro':
         structure.plantedAt = typeof data?.plantedAt === 'number' ? data.plantedAt : -1;
+        structure.crop = isCropId(data?.crop) ? data.crop : 'batata';
         structure.use = {
           id: `${structure.id}:horta`,
           position: new THREE.Vector3(x, y + 0.4, z),
@@ -768,54 +771,81 @@ export class BuildingSystem implements InteractableProvider {
   /** Progresso do canteiro (0 a 1), ou -1 se estiver vazio. */
   gardenProgress(s: PlacedStructure, now = this.hooks.playTime()): number {
     if (s.plantedAt === undefined || s.plantedAt < 0) return -1;
-    return Math.min(1, Math.max(0, (now - s.plantedAt) / CROP_GROW_SECONDS));
+    const grow = CROPS[s.crop ?? 'batata'].growSeconds;
+    return Math.min(1, Math.max(0, (now - s.plantedAt) / grow));
   }
 
-  private gardenAction(s: PlacedStructure) {
+  /** Plantas que o jogador pode plantar agora (tem a semente). */
+  private availableCrops(): CropId[] {
+    return CROP_ORDER.filter((id) => this.hooks.inventory.has(CROPS[id].seed));
+  }
+
+  private gardenAction(s: PlacedStructure): InteractAction {
     const k = this.gardenProgress(s);
     if (k < 0) {
-      return this.hooks.inventory.has('semente')
-        ? { label: 'Plantar semente', enabled: true }
-        : { label: 'Plantar semente', enabled: false, reason: 'Precisa de Semente (às vezes vem do capim alto)' };
+      const crops = this.availableCrops();
+      if (crops.length === 0) {
+        return { label: 'Plantar semente', enabled: false, reason: 'Precisa de uma semente (o capim alto às vezes dá)' };
+      }
+      return { label: crops.length === 1 ? `Plantar ${ITEMS[CROPS[crops[0]].seed].name}` : 'Plantar…', enabled: true };
     }
     if (k < 1) return { label: `Crescendo… ${Math.floor(k * 100)}%`, enabled: false, reason: 'Ainda não está pronto para colher' };
-    return { label: 'Colher batatas-doces', enabled: true };
+    return { label: CROPS[s.crop ?? 'batata'].harvestLabel, enabled: true };
   }
 
   private useGarden(s: PlacedStructure): void {
     const k = this.gardenProgress(s);
     const pos = new THREE.Vector3(s.x, s.y + 0.4, s.z);
     if (k < 0) {
-      if (!this.hooks.inventory.remove('semente', 1)) return;
-      s.plantedAt = this.hooks.playTime();
-      this.hooks.sound('leaves');
-      this.hooks.burst(pos, '#6b4a2e', 10);
-      this.hooks.notify('Semente plantada! Volte em alguns minutos para colher.', 'success');
+      const crops = this.availableCrops();
+      if (crops.length === 1) this.plant(s, crops[0], pos);
+      else if (crops.length > 1) {
+        void this.hooks.chooseCrop(crops).then((crop) => {
+          if (crop && this.gardenProgress(s) < 0) this.plant(s, crop, pos);
+        });
+      }
       return;
     }
     if (k < 1) return;
+    const def = CROPS[s.crop ?? 'batata'];
     s.plantedAt = -1;
-    const seeds = 1 + (Math.random() < 0.4 ? 1 : 0);
-    this.hooks.inventory.add('batata_doce', 3);
-    this.hooks.inventory.add('semente', seeds);
+    const seeds = 1 + (Math.random() < def.extraSeedChance ? 1 : 0);
+    this.hooks.inventory.add(def.produce, def.amount);
+    this.hooks.inventory.add(def.seed, seeds);
     this.hooks.addXP(6);
     this.hooks.sound('pickup');
     this.hooks.burst(pos, '#c8573a', 14);
-    this.hooks.notify(`Colheita: 3 Batata-doce e ${seeds} Semente${seeds > 1 ? 's' : ''}`, 'item');
-    this.bus.emit('crop:harvested', { itemId: 'batata_doce', amount: 3 });
-    this.bus.emit('resource:gathered', { itemId: 'batata_doce', amount: 3 });
+    this.hooks.notify(`Colheita: ${def.amount} ${ITEMS[def.produce].name} e ${seeds} ${ITEMS[def.seed].name}`, 'item');
+    this.bus.emit('crop:harvested', { itemId: def.produce, amount: def.amount });
+    this.bus.emit('resource:gathered', { itemId: def.produce, amount: def.amount });
+  }
+
+  private plant(s: PlacedStructure, crop: CropId, pos: THREE.Vector3): void {
+    if (!this.hooks.inventory.remove(CROPS[crop].seed, 1)) return;
+    s.crop = crop;
+    s.plantedAt = this.hooks.playTime();
+    this.hooks.sound('leaves');
+    this.hooks.burst(pos, '#6b4a2e', 10);
+    this.hooks.notify(`${ITEMS[CROPS[crop].seed].name} plantada! Volte em alguns minutos para colher.`, 'success');
   }
 
   private updateGardenVisual(s: PlacedStructure, now: number): void {
     const k = this.gardenProgress(s, now);
-    const plant = s.model.plant;
-    const crop = s.model.crop;
-    if (plant) {
-      plant.visible = k >= 0;
-      const scale = k < 0 ? 0.01 : 0.15 + 0.85 * k;
-      plant.scale.set(scale, scale, scale);
+    const current = s.crop ?? 'batata';
+    const sets: Array<[CropId, { plant?: THREE.Object3D; crop?: THREE.Object3D }]> = [
+      ['batata', { plant: s.model.plant, crop: s.model.crop }],
+      ['milho', s.model.variants?.milho ?? {}],
+      ['abacaxi', s.model.variants?.abacaxi ?? {}],
+    ];
+    for (const [id, set] of sets) {
+      const active = id === current && k >= 0;
+      if (set.plant) {
+        set.plant.visible = active;
+        const scale = active ? 0.15 + 0.85 * k : 0.01;
+        set.plant.scale.set(scale, scale, scale);
+      }
+      if (set.crop) set.crop.visible = active && k >= 1;
     }
-    if (crop) crop.visible = k >= 1;
   }
 
   // ---------------------------------------------------------------------------
@@ -889,7 +919,7 @@ export class BuildingSystem implements InteractableProvider {
       const save: StructureSave = { id: s.id, type: s.type, x: s.x, z: s.z, rot: s.rot };
       if (s.def.modular) save.y = s.y;
       if (s.storage) save.data = Object.fromEntries(s.storage);
-      if (s.type === 'canteiro') save.data = { plantedAt: s.plantedAt ?? -1 };
+      if (s.type === 'canteiro') save.data = { plantedAt: s.plantedAt ?? -1, crop: s.crop ?? 'batata' };
       if (s.type === 'fogueira' && s.lit === false) save.data = { lit: 0 };
       return save;
     });

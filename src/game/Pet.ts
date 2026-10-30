@@ -65,6 +65,8 @@ const LOOT_TABLE: ItemBundle[] = [
   { cristal: 3 },
   { batata_assada: 2, semente: 2 },
   { madeira: 8, pedra: 6 },
+  { semente_milho: 2, fruta: 2 },
+  { muda_abacaxi: 1, cristal: 1 },
 ];
 
 /** Lugares dos tesouros: sorteados uma vez, sempre iguais (dependem só do terreno). */

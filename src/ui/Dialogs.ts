@@ -15,6 +15,16 @@ export interface ConfirmOptions {
   danger?: boolean;
 }
 
+export interface ChooseOptions {
+  title: string;
+  text?: string[];
+  /** Quem está falando (aparece acima do título). */
+  speaker?: string;
+  /** Ícone grande do personagem. */
+  portrait?: string;
+  options: Array<{ label: string; value: string; icon?: string; disabled?: boolean }>;
+}
+
 export class Dialogs {
   readonly layer: HTMLElement;
   private stack = 0;
@@ -57,6 +67,32 @@ export class Dialogs {
         </div>`);
       this.show(el, () => resolve());
       (el.querySelector('[data-r="1"]') as HTMLElement).focus();
+    });
+  }
+
+  /**
+   * Pergunta com várias respostas (diálogos com personagens, escolhas).
+   * Retorna o `value` da opção escolhida, ou null se o jogador fechar.
+   */
+  choose(opts: ChooseOptions): Promise<string | null> {
+    return new Promise((resolve) => {
+      const paragraphs = (opts.text ?? []).map((p) => `<p>${escapeHtml(p)}</p>`).join('');
+      const buttons = opts.options
+        .map(
+          (o, i) =>
+            `<button class="btn ${i === 0 ? 'btn-primary' : 'btn-ghost'} choice-btn" data-r="c:${escapeHtml(o.value)}"${o.disabled ? ' disabled' : ''}>${o.icon ? icon(o.icon) : ''}<span>${escapeHtml(o.label)}</span></button>`,
+        )
+        .join('');
+      const el = html(`
+        <div class="dialog dialog-choice" role="dialog" aria-modal="true">
+          ${opts.portrait ? `<div class="choice-portrait">${icon(opts.portrait)}</div>` : ''}
+          ${opts.speaker ? `<div class="choice-speaker">${escapeHtml(opts.speaker)}</div>` : ''}
+          <h2>${escapeHtml(opts.title)}</h2>
+          <div class="lore-text">${paragraphs}</div>
+          <div class="choice-list">${buttons}</div>
+        </div>`);
+      this.show(el, (r) => resolve(r.startsWith('c:') ? r.slice(2) : null));
+      (el.querySelector('.choice-btn:not([disabled])') as HTMLElement | null)?.focus();
     });
   }
 

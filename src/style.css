@@ -2046,6 +2046,49 @@ li.done .qt-text,
   justify-content: center;
 }
 
+.dialog-choice {
+  width: min(540px, 100%);
+  text-align: center;
+}
+
+.dialog-choice .lore-text p {
+  text-align: left;
+  font-size: 16px;
+}
+
+.choice-portrait {
+  font-size: 64px;
+  display: flex;
+  justify-content: center;
+}
+
+.choice-speaker {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffd166;
+}
+
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.choice-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.choice-btn svg {
+  font-size: 22px;
+}
+
 .lore-ornament {
   font-size: 54px;
   display: flex;

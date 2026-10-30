@@ -126,6 +126,26 @@ export const QUESTS: QuestDef[] = [
     target: { x: 0, z: 140 },
   },
   {
+    id: 'q_cozinha',
+    title: 'Chef da Ilha',
+    description:
+      'Plante milho (as sementes são raras no capim) e abacaxi (as mudas caem dos arbustos de frutas). Depois prepare uma Salada Tropical e um Ensopado da Ilha.',
+    objectives: [
+      { type: 'craft', item: 'salada_tropical', amount: 1 },
+      { type: 'craft', item: 'ensopado', amount: 1 },
+    ],
+    requires: ['q_horta'],
+    rewards: { xp: 120, items: { semente_milho: 1, muda_abacaxi: 1 } },
+  },
+  {
+    id: 'q_dourado',
+    title: 'Brilho na Água Escura',
+    description: 'Dizem que um peixe dourado morde a isca só à noite. Pesque um (na chuva, a sorte é maior).',
+    objectives: [{ type: 'collect', item: 'peixe_dourado', amount: 1 }],
+    requires: ['q_pesca'],
+    rewards: { xp: 80 },
+  },
+  {
     id: 'q_vagalumes',
     title: 'Luz Contra os Ladrões',
     description:

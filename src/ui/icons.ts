@@ -127,6 +127,47 @@ export const ICONS: Record<string, string> = {
     <path d="M5 20c2-8 13-13 21-8 4 3 1 11-7 13-7 2-15 2-14-5z" fill="#8a3e22"/>
     <path d="M12 16c3-2 7-2 9 0-3 3-6 3-9 0z" fill="#ffcf5c"/>
     <path d="M12 9c-1-2 1-3 0-5M18 9c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.4" fill="none" stroke-linecap="round"/>`),
+  semente_milho: svg(`
+    <ellipse cx="10" cy="18" rx="3.5" ry="4.5" fill="#f2c53d"/>
+    <ellipse cx="17" cy="21" rx="3.5" ry="4.5" fill="#e8b22c"/>
+    <ellipse cx="22" cy="14" rx="3.5" ry="4.5" fill="#f5cf55"/>`),
+  milho: svg(`
+    <path d="M16 4c5 0 7 6 6 13s-3 11-6 11-5-4-6-11 1-13 6-13z" fill="#f5c935"/>
+    <path d="M13 9h6M12 13h8M12 17h8M13 21h6" stroke="#d9a520" stroke-width="1.4"/>
+    <path d="M10 27c-3-5-4-10-3-15 3 4 5 9 6 15zM22 27c3-5 4-10 3-15-3 4-5 9-6 15z" fill="#6cbf4a"/>`),
+  milho_assado: svg(`
+    <path d="M16 4c5 0 7 6 6 13s-3 11-6 11-5-4-6-11 1-13 6-13z" fill="#d99a2b"/>
+    <path d="M13 9h6M12 13h8M12 17h8M13 21h6" stroke="#8a5a14" stroke-width="1.6"/>
+    <path d="M9 7c-1-2 1-3 0-5M23 7c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.4" fill="none" stroke-linecap="round"/>`),
+  muda_abacaxi: svg(`
+    <path d="M16 28c-4 0-6-1-6-3h12c0 2-2 3-6 3z" fill="#8a5a2e"/>
+    <path d="M16 25L9 8l5 9 2-13 2 13 5-9z" fill="#4caf50"/>
+    <path d="M16 25l-3-12 3 6 3-6z" fill="#7bd06a"/>`),
+  abacaxi: svg(`
+    <ellipse cx="16" cy="21" rx="7" ry="8.5" fill="#f2b632"/>
+    <path d="M11 15l10 12M21 15l-10 12M9 20l7 8M23 20l-7 8" stroke="#c98a1c" stroke-width="1.3"/>
+    <path d="M16 13l-5-10 4 5 1-6 1 6 4-5z" fill="#4caf50"/>`),
+  salada_tropical: svg(`
+    <path d="M4 16h24c0 7-5 12-12 12S4 23 4 16z" fill="#e9dcc0" stroke="#b9a27a" stroke-width="1.5"/>
+    <circle cx="11" cy="14" r="3.5" fill="#ff6f61"/>
+    <rect x="15" y="10" width="6" height="6" rx="1.5" fill="#f2b632"/>
+    <circle cx="22" cy="14" r="3" fill="#ffa94d"/>
+    <path d="M7 13c2-2 4-2 6 0" stroke="#4caf50" stroke-width="2" fill="none"/>`),
+  ensopado: svg(`
+    <path d="M5 14h22l-2 12H7z" fill="#5b6470"/>
+    <path d="M5 14h22" stroke="#3b424b" stroke-width="2.4" stroke-linecap="round"/>
+    <ellipse cx="16" cy="14.5" rx="10" ry="2.2" fill="#d9822b"/>
+    <circle cx="12" cy="14" r="1.6" fill="#f5c935"/><circle cx="19" cy="14.4" r="1.6" fill="#c8573a"/>
+    <path d="M12 9c-1-2 1-3 0-5M18 9c-1-2 1-3 0-5" stroke="#d7d7d7" stroke-width="1.4" fill="none" stroke-linecap="round"/>`),
+  peixe_dourado: svg(`
+    <circle cx="15" cy="16" r="12" fill="#ffe066" opacity="0.25"/>
+    <path d="M4 16c5-7 14-8 20-2l5-5v14l-5-5c-6 6-15 5-20-2z" fill="#ffc533"/>
+    <path d="M4 16c5-3 12-4 18 0-6 3-13 3-18 0z" fill="#fff0a0"/>
+    <circle cx="9" cy="14" r="1.5" fill="#123"/>`),
+  dourado_grelhado: svg(`
+    <path d="M4 17c5-7 14-8 20-2l5-5v14l-5-5c-6 6-15 5-20-2z" fill="#e0a12a"/>
+    <path d="M10 14l2 6M15 13l2 7M20 14l1 5" stroke="#8a5a14" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M23 5l1 2 2 .5-2 .5-1 2-1-2-2-.5 2-.5z" fill="#fff6c2"/>`),
   bau: svg(`
     <rect x="4" y="13" width="24" height="14" rx="2" fill="#9a6a3f"/>
     <path d="M4 13c0-6 24-6 24 0z" fill="#b98552"/>

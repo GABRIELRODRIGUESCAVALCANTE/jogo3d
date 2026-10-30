@@ -399,7 +399,8 @@ export class ResourceManager implements InteractableProvider {
     const def = node.def;
     const hasBonusTool = def.toolBonus ? ctx.hasItem(def.toolBonus.tool) : false;
     const amount = hasBonusTool && def.toolBonus ? def.toolBonus.amount : def.amount;
-    const bonus = def.bonus && Math.random() < def.bonus.chance ? def.bonus.item : null;
+    let bonus = def.bonus && Math.random() < def.bonus.chance ? def.bonus.item : null;
+    if (!bonus && def.rareBonus && Math.random() < def.rareBonus.chance) bonus = def.rareBonus.item;
     node.remaining--;
 
     // Direção do golpe (do jogador para o recurso) para a árvore cair "para longe".

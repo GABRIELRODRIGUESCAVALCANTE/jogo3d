@@ -22,6 +22,7 @@ import { CameraController } from './CameraController';
 import { CollisionWorld } from './Collision';
 import { CraftingSystem } from './Crafting';
 import { ITEMS, type ItemBundle, type ItemId } from './data/items';
+import { CROPS, isCropId, type CropId } from './data/crops';
 import { LORE } from './data/lore';
 import { getRecipe, RECIPES } from './data/recipes';
 import { getRegion, regionAt } from './data/regions';
@@ -249,6 +250,7 @@ export class Game {
       sound: (name) => this.audio.play(name),
       splash: (pos) => this.particles.burst(this.tmpVec.copy(pos).setY(0.05), '#d8f6ff', 8, { up: 2.5, speed: 1.4, size: 0.1, life: 0.5 }),
       addXP: (n) => this.progression.addXP(n),
+      rareChance: () => (this.world.dayNight.isNight ? 0.25 : 0) + (this.world.weather.raining ? 0.08 : 0),
     });
     this.interaction.addProvider(this.fishing);
     this.boatCtl = new BoatController(this.player, this.world.terrain, {
@@ -1634,6 +1636,16 @@ export class Game {
       playerYaw: () => this.player.yaw,
       playTime: () => this.playTime,
       raining: () => this.world.weather.raining,
+      chooseCrop: async (options: CropId[]) => {
+        const answer = await this.ui.dialogs.choose({
+          title: 'O que plantar?',
+          options: options.map((id) => {
+            const seed = ITEMS[CROPS[id].seed];
+            return { label: `${seed.name} (${this.inventory.count(seed.id)})`, value: id, icon: seed.icon };
+          }),
+        });
+        return isCropId(answer) ? answer : null;
+      },
     };
   }
 

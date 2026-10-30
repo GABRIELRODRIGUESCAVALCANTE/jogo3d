@@ -68,9 +68,16 @@ test('casa modular, baú, horta, pesca e fome', async ({ page }) => {
     const c = g.building.structures.find((s) => s.type === 'canteiro')!;
     g.player.teleport(c.x, g.world.terrain.getHeight(c.x, c.z + 2), c.z + 2, Math.PI);
   });
-  await expect.poll(() => noJogo(page, (g) => g.interaction.currentAction?.label)).toBe('Plantar semente');
-  await page.keyboard.press('KeyE');
-  await expect.poll(() => noJogo(page, (g) => g.inventory.count('semente'))).toBe(0);
+  await expect.poll(() => noJogo(page, (g) => g.interaction.currentAction?.label)).toBe('Plantar Semente');
+  await expect
+    .poll(async () => {
+      if ((await noJogo(page, (g) => g.inventory.count('semente'))) > 0) {
+        await page.keyboard.press('KeyE');
+        await page.waitForTimeout(600);
+      }
+      return noJogo(page, (g) => g.inventory.count('semente'));
+    })
+    .toBe(0);
   await noJogo(page, (g) => (g.playTime += 250));
   await expect.poll(() => noJogo(page, (g) => g.interaction.currentAction?.label)).toBe('Colher batatas-doces');
   // Sem GPU os quadros são lentos: insiste no E até a colheita acontecer.
