@@ -35,6 +35,9 @@ export const RECIPES: RecipeDef[] = [
     xp: 25,
   },
   { id: 'fruta_assada', result: 'fruta_assada', amount: 1, cost: { fruta: 2 }, station: 'fogueira', xp: 4 },
+  { id: 'vara_de_pesca', result: 'vara_de_pesca', amount: 1, cost: { madeira: 2, corda: 1, fibra: 2 }, xp: 10 },
+  { id: 'peixe_assado', result: 'peixe_assado', amount: 1, cost: { peixe: 1 }, station: 'fogueira', xp: 4 },
+  { id: 'batata_assada', result: 'batata_assada', amount: 1, cost: { batata_doce: 2 }, station: 'fogueira', xp: 4 },
 ];
 
 export function getRecipe(id: string): RecipeDef | undefined {

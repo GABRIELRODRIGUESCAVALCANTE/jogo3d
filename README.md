@@ -79,10 +79,18 @@ O tipo de controle é detectado automaticamente e pode ser trocado em **Opções
 - Câmera que segue o personagem, desvia do terreno e se aproxima dentro da caverna e da cabana.
 - Colisão com árvores, pedras, paredes e construções (dá para subir em pedras e pisos).
 - Coleta de **madeira, pedra, fibra, frutas e cristais**; os recursos renascem com o tempo.
+- **Fome (saciedade)**: diminui com o tempo; com fome a energia volta devagar, faminto ela não volta.
+- **Durabilidade das ferramentas** (machado, picareta, vara de pesca e a tocha, que queima enquanto acesa).
+- **Pesca** com minijogo (lançar, esperar a boia afundar e puxar na hora certa) perto dos cardumes.
+- **Horta**: sementes do capim alto, canteiro, crescimento em tempo de jogo e colheita de batatas-doces.
+- **Baú de armazenamento** para guardar itens.
+- **Construção modular** em grade de 2 m: piso, paredes (lisa, com porta, com janela) e telhado de palha.
+- Fauna: raposas animadas (glTF), caranguejos, gaivotas e peixes que saltam da água.
+- Personagem à escolha: Explorador ou Robô (modelo glTF com animações e gestos).
 - Inventário visual, comida que restaura energia e o bônus "Bem alimentado".
-- Fabricação: corda, machado, picareta, tocha e fruta assada (com estações: bancada e fogueira).
-- Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, cerca, caminho e lanterna.
-- 15 missões encadeadas com objetivos, recompensas e um final.
+- Fabricação: corda, machado, picareta, tocha, vara de pesca e comidas assadas (com estações: bancada e fogueira).
+- Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, baú, canteiro, peças modulares, cerca, caminho e lanterna.
+- 18 missões (15 da história principal e 3 opcionais) com objetivos, recompensas e um final.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
 - Ciclo de dia e noite (sol, lua, estrelas), luzes de fogueiras, lanternas e tocha; dormir na cabana pula a noite.

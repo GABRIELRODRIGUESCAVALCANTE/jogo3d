@@ -56,6 +56,7 @@ export class InventoryPanel extends Panel {
         <button class="slot ${this.selected === id ? 'selected' : ''}" data-item="${id}" aria-label="${escapeHtml(def.name)}: ${n}">
           ${icon(def.icon)}
           ${def.tool ? '' : `<span class="slot-count">${n}</span>`}
+          ${durabilityBar(inv.durabilityFraction(id))}
           <span class="slot-name">${escapeHtml(def.name)}</span>
         </button>`);
     }
@@ -69,7 +70,12 @@ export class InventoryPanel extends Panel {
       const n = inv.count(this.selected);
       const actions: string[] = [];
       if (def.food) {
-        actions.push(`<button class="btn btn-primary" data-use="${def.id}">${icon(def.icon)} Comer (+${def.food.energy} energia)</button>`);
+        actions.push(`<button class="btn btn-primary" data-use="${def.id}">${icon(def.icon)} Comer (+${def.food.hunger} saciedade)</button>`);
+      }
+      const dur = inv.durabilityOf(def.id);
+      if (dur !== null && def.durability) {
+        const unit = def.id === 'tocha' ? 's de luz' : ' usos';
+        actions.unshift(`<div class="durability-detail">${durabilityBar(dur / def.durability)}<span>Durabilidade: ${Math.ceil(dur)}/${def.durability}${unit}</span></div>`);
       }
       if (def.id === 'tocha') {
         actions.push(`<button class="btn btn-primary" data-use="tocha">${icon('tocha')} ${this.game.player.torchOn ? 'Apagar tocha' : 'Acender tocha'} <kbd>T</kbd></button>`);
@@ -92,7 +98,15 @@ export class InventoryPanel extends Panel {
       </div>
       <div class="inventory-footer">
         <span>${icon('raio')} Energia: <b>${Math.round(p.energy)}/${p.maxEnergy}</b></span>
+        <span>${icon('fome')} Saciedade: <b>${Math.round(p.hunger)}/100</b></span>
         <span>${icon('mochila')} Itens: <b>${inv.totalItems}</b></span>
       </div>`;
   }
+}
+
+/** Barrinha de durabilidade (verde → amarelo → vermelho). */
+function durabilityBar(fraction: number | null): string {
+  if (fraction === null) return '';
+  const color = fraction > 0.5 ? '#7bd88f' : fraction > 0.2 ? '#ffcf5c' : '#ff6b6b';
+  return `<span class="durability"><span style="width:${Math.max(4, fraction * 100)}%;background:${color}"></span></span>`;
 }

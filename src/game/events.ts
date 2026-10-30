@@ -13,6 +13,10 @@ export interface GameEvents {
   'resource:gathered': { itemId: ItemId; amount: number };
   'item:crafted': { itemId: ItemId; amount: number };
   'item:used': { itemId: ItemId };
+  'tool:worn': { itemId: ItemId };
+  'tool:broken': { itemId: ItemId };
+  'fish:caught': { itemId: ItemId };
+  'crop:harvested': { itemId: ItemId; amount: number };
   'structure:built': { type: StructureId; id: string };
   'structure:removed': { type: StructureId; id: string };
   'region:discovered': { regionId: RegionId };

@@ -113,6 +113,42 @@ export const QUESTS: QuestDef[] = [
     completeText: 'Você agora tem um lar. Use a cama da cabana para dormir até o amanhecer.',
   },
   {
+    id: 'q_pesca',
+    title: 'Pescador da Ilha',
+    description: 'Fabrique uma vara de pesca. Na beira da água, perto de onde os peixes saltam, interaja para pescar e puxe na hora certa!',
+    objectives: [
+      { type: 'craft', item: 'vara_de_pesca', amount: 1 },
+      { type: 'collect', item: 'peixe', amount: 3 },
+    ],
+    requires: ['q_ferramentas'],
+    rewards: { xp: 70, items: { corda: 1 } },
+    target: { x: 0, z: 140 },
+  },
+  {
+    id: 'q_horta',
+    title: 'Mãos na Terra',
+    description: 'Arranque capim para achar sementes, construa um canteiro, plante e espere crescer para colher batatas-doces.',
+    objectives: [
+      { type: 'build', structure: 'canteiro', amount: 1 },
+      { type: 'collect', item: 'batata_doce', amount: 3 },
+    ],
+    requires: ['q_fogueira'],
+    rewards: { xp: 70 },
+  },
+  {
+    id: 'q_casa',
+    title: 'Casa do Seu Jeito',
+    description: 'Use as peças modulares: pisos, paredes e telhados de palha se encaixam numa grade. Monte uma casa do seu jeito!',
+    objectives: [
+      { type: 'build', structure: 'piso', amount: 4 },
+      { type: 'build', structure: 'parede', amount: 3 },
+      { type: 'build', structure: 'telhado', amount: 2 },
+    ],
+    requires: ['q_cabana'],
+    rewards: { xp: 120, items: { corda: 2 } },
+    target: PLACES.clearing,
+  },
+  {
     id: 'q_ruinas',
     title: 'Ecos do Passado',
     description: 'O fragmento do baú tem símbolos estranhos. Siga a trilha a leste até as ruínas e examine o monólito.',

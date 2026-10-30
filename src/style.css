@@ -537,6 +537,15 @@ kbd {
   transition: transform 0.1s linear;
 }
 
+.bar-hunger .fill {
+  background: linear-gradient(90deg, #ffc46b, #ff9a3d);
+}
+
+.bar-hunger.low .fill {
+  background: linear-gradient(90deg, #ff8a7a, #e8504a);
+  animation: pulse 0.8s ease-in-out infinite alternate;
+}
+
 .bar-energy.low .fill {
   background: linear-gradient(90deg, #ff8a7a, #e8504a);
   animation: pulse 0.8s ease-in-out infinite alternate;
@@ -2601,5 +2610,116 @@ li.done .qt-text,
   60%,
   100% {
     transform: rotate(-90deg);
+  }
+}
+
+/* Durabilidade das ferramentas */
+.durability {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 22px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.durability span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.durability-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.durability-detail .durability {
+  position: relative;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+}
+
+/* Baú de armazenamento */
+.storage-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.storage-layout h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-title);
+  margin: 0 0 8px;
+  color: var(--gold);
+}
+
+.storage-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.storage-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-family: var(--font-title);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.storage-item svg {
+  font-size: 28px;
+}
+
+.storage-item span {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-item:hover {
+  border-color: var(--line-strong);
+}
+
+.storage-item[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.build-group {
+  font-family: var(--font-title);
+  font-size: 16px;
+  color: var(--gold);
+  margin: 14px 0 4px;
+}
+
+.build-group:first-of-type {
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .storage-layout {
+    grid-template-columns: 1fr;
   }
 }

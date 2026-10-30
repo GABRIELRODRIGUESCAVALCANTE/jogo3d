@@ -26,6 +26,8 @@ export class HUD {
   private readonly xpLabel: HTMLElement;
   private readonly energyFill: HTMLElement;
   private readonly energyLabel: HTMLElement;
+  private readonly hungerFill: HTMLElement;
+  private readonly hungerLabel: HTMLElement;
   private readonly buffEl: HTMLElement;
   private readonly clockEl: HTMLElement;
   private readonly clockIcon: HTMLElement;
@@ -64,6 +66,7 @@ export class HUD {
           <div class="bars">
             <div class="bar bar-xp"><div class="fill"></div><span class="bar-label">XP</span></div>
             <div class="bar bar-energy"><div class="fill"></div><span class="bar-label">Energia</span></div>
+            <div class="bar bar-hunger"><div class="fill"></div><span class="bar-label">Saciedade</span></div>
             <div class="buff hidden">${icon('fruta_assada')}<span></span></div>
           </div>
         </div>
@@ -90,6 +93,8 @@ export class HUD {
     this.xpLabel = $(this.el, '.bar-xp .bar-label');
     this.energyFill = $(this.el, '.bar-energy .fill');
     this.energyLabel = $(this.el, '.bar-energy .bar-label');
+    this.hungerFill = $(this.el, '.bar-hunger .fill');
+    this.hungerLabel = $(this.el, '.bar-hunger .bar-label');
     this.buffEl = $(this.el, '.buff');
     this.clockEl = $(this.el, '.clock-text');
     this.clockIcon = $(this.el, '.clock-icon');
@@ -150,6 +155,9 @@ export class HUD {
     const p = g.player;
     this.energyFill.style.transform = `scaleX(${p.energy / p.maxEnergy})`;
     this.energyLabel.textContent = `Energia ${Math.round(p.energy)}`;
+    this.hungerFill.style.transform = `scaleX(${p.hunger / 100})`;
+    this.hungerLabel.textContent = p.hunger <= 0 ? 'Faminto!' : `Saciedade ${Math.round(p.hunger)}`;
+    this.hungerFill.parentElement!.classList.toggle('low', p.hunger < 25);
     this.energyFill.parentElement!.classList.toggle('low', p.energy < 20);
 
     // Atualizações mais lentas (4x por segundo).
@@ -269,7 +277,11 @@ export class HUD {
     } else {
       this.buildEl.classList.add('hidden');
       const action = g.interaction.currentAction;
-      if (action && g.isPlaying) {
+      if (g.fishing.active && g.isPlaying) {
+        const bite = g.fishing.state === 'bite';
+        text = bite && !touch ? '[E] Puxe agora!' : g.fishing.prompt;
+        cls = bite ? 'ok' : 'muted';
+      } else if (action && g.isPlaying) {
         if (action.enabled) {
           text = touch ? action.label : `[E] ${action.label}`;
         } else {
@@ -281,8 +293,8 @@ export class HUD {
     const key = `${text}|${cls}`;
     if (key === this.lastPrompt) return;
     this.lastPrompt = key;
-    this.promptEl.classList.toggle('hidden', !text || (touch && g.building.mode === 'none'));
-    this.promptEl.className = `prompt ${cls} ${!text || (touch && g.building.mode === 'none') ? 'hidden' : ''}`;
+    const hideOnTouch = touch && g.building.mode === 'none' && !g.fishing.active;
+    this.promptEl.className = `prompt ${cls} ${!text || hideOnTouch ? 'hidden' : ''}`;
     this.promptEl.innerHTML = text.startsWith('[E] ') ? `<kbd>E</kbd>${escapeHtml(text.slice(4))}` : escapeHtml(text);
   }
 }

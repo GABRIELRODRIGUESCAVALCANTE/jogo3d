@@ -81,7 +81,7 @@ test('apagar salvamento pede confirmação', async ({ page }) => {
   await expect(page.locator('[data-menu="continuar"]')).toBeHidden();
 });
 
-test('história completa: as 15 missões até o farol', async ({ page }) => {
+test('história completa: missões principais até o farol', async ({ page }) => {
   test.slow();
   await abrirJogo(page);
   await novoJogo(page);
@@ -146,5 +146,5 @@ test('história completa: as 15 missões até o farol', async ({ page }) => {
   await irPara(page, -12, -104, 2.4, Math.PI * 0.8);
   await interagirAte(page, 'farol');
   await fecharDialogos(page);
-  await expect.poll(() => noJogo(page, (g) => g.quests.allCompleted)).toBe(true);
+  await expect.poll(() => noJogo(page, (g) => g.quests.isCompleted('q_horizonte'))).toBe(true);
 });

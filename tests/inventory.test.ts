@@ -47,3 +47,27 @@ describe('Inventário', () => {
     expect(inv.toJSON()).toEqual({ madeira: 4, cristal: 2 });
   });
 });
+
+describe('Durabilidade das ferramentas', () => {
+  it('desgasta, avisa e quebra', () => {
+    const bus = createEventBus();
+    const avisos: string[] = [];
+    bus.on('tool:worn', (e) => avisos.push(`gasto:${e.itemId}`));
+    bus.on('tool:broken', (e) => avisos.push(`quebrou:${e.itemId}`));
+    const inv = new Inventory(bus);
+    inv.add('machado');
+    expect(inv.durabilityOf('machado')).toBe(80);
+    for (let i = 0; i < 64; i++) inv.wearTool('machado');
+    expect(avisos).toEqual(['gasto:machado']);
+    for (let i = 0; i < 16; i++) inv.wearTool('machado');
+    expect(inv.has('machado')).toBe(false);
+    expect(avisos).toEqual(['gasto:machado', 'quebrou:machado']);
+  });
+
+  it('salvamentos sem durabilidade começam com ferramenta nova', () => {
+    const inv = new Inventory();
+    inv.load({ picareta: 1, tocha: 1 }, { picareta: 12 });
+    expect(inv.durabilityOf('picareta')).toBe(12);
+    expect(inv.durabilityOf('tocha')).toBe(420);
+  });
+});

@@ -9,7 +9,8 @@ import { AudioManager } from '../core/AudioManager';
 import { Input } from '../core/Input';
 import { clamp, smoothstep } from '../core/math';
 import { DAY_LENGTH_SECONDS, QUALITY_PRESETS, Settings } from '../core/Settings';
-import { BuildingSystem } from './Building';
+import { BuildingSystem, type PlacedStructure } from './Building';
+import { FishingSystem } from './Fishing';
 import { CameraController } from './CameraController';
 import { CollisionWorld } from './Collision';
 import { CraftingSystem } from './Crafting';
@@ -71,6 +72,7 @@ export class Game {
   readonly particles = new Particles();
   readonly models = new ModelLibrary();
   wildlife!: Wildlife;
+  fishing!: FishingSystem;
   readonly player = new Player();
   world!: World;
   building!: BuildingSystem;
@@ -110,6 +112,8 @@ export class Game {
   private readonly tmpVec = new THREE.Vector3();
   private readonly interactionCtx: InteractionContext;
   private dustTimer = 0;
+  /** 0 = sem aviso; 1 = avisou "com fome"; 2 = avisou "faminto". */
+  private hungerWarned = 0;
   private characterLoaded = '';
   /** A câmera não atravessa paredes de construções, rochas da caverna e pilares. */
   private readonly cameraBlocked = (x: number, y: number, z: number) => this.collision.blocksCamera(x, y, z);
@@ -191,6 +195,20 @@ export class Game {
     this.wildlife.build();
     this.wildlife.onSplash = (x, z) => this.particles.burst(this.tmpVec.set(x, 0.05, z), '#d8f6ff', 6, { up: 2.5, speed: 1.2, size: 0.1, life: 0.5 });
     this.world.scene.add(this.wildlife.group);
+    this.fishing = new FishingSystem(this.player, this.wildlife, this.world.terrain, this.bus, {
+      hasRod: () => this.inventory.has('vara_de_pesca'),
+      wearRod: () => this.inventory.wearTool('vara_de_pesca'),
+      give: (item, amount) => {
+        this.inventory.add(item, amount);
+        this.ui.notify.itemPopup(item, amount);
+      },
+      notify: (text) => this.ui.notify.toast(text, 'info', 'vara_de_pesca'),
+      sound: (name) => this.audio.play(name),
+      splash: (pos) => this.particles.burst(this.tmpVec.copy(pos).setY(0.05), '#d8f6ff', 8, { up: 2.5, speed: 1.4, size: 0.1, life: 0.5 }),
+      addXP: (n) => this.progression.addXP(n),
+    });
+    this.interaction.addProvider(this.fishing);
+    this.world.scene.add(this.fishing.group);
 
     this.torchLight = this.lights.add({
       position: new THREE.Vector3(),
@@ -311,13 +329,19 @@ export class Game {
         { getHeight, collision: this.collision },
       );
 
-      if (!placing && this.building.mode !== 'place') {
+      if (this.fishing.active) {
+        if (input.actionPressed('interact')) this.fishing.press();
+        this.interaction.current = null;
+        this.interaction.currentAction = null;
+      } else if (!placing && this.building.mode !== 'place') {
         this.interaction.update(dt, this.interactionCtx, input.actionPressed('interact'), input.actionHeld('interact'));
       } else {
         this.interaction.current = null;
         this.interaction.currentAction = null;
       }
       this.world.resources.update(dt, this.playTime, this.player.position);
+      this.fishing.update(dt);
+      this.updateSurvival(dt);
 
       // Poeira nos pés ao correr.
       this.dustTimer -= dt;
@@ -366,7 +390,8 @@ export class Game {
     // Botão de interação no celular.
     if (this.controlMode === 'touch') {
       const action = this.interaction.currentAction;
-      this.ui.touch.setInteraction(action?.label ?? null, action?.enabled ?? false);
+      if (this.fishing.active) this.ui.touch.setInteraction(this.fishing.state === 'bite' ? 'Puxar!' : 'Pescando…', this.fishing.state === 'bite');
+      else this.ui.touch.setInteraction(action?.label ?? null, action?.enabled ?? false);
     }
 
     const lockHint =
@@ -504,6 +529,14 @@ export class Game {
       if (itemId === 'tocha') this.ui.touch.setTorchAvailable(this.inventory.has('tocha'), this.player.torchOn);
     });
     bus.on('resource:gathered', ({ amount }) => (this.stats.gathered += amount));
+    bus.on('tool:worn', ({ itemId }) => ui.notify.toast(`${ITEMS[itemId].name} está quase quebrando. Prepare outro!`, 'warning', ITEMS[itemId].icon));
+    bus.on('tool:broken', ({ itemId }) => {
+      if (itemId === 'tocha') this.player.torchOn = false;
+      if (itemId === 'vara_de_pesca') this.fishing.stop();
+      this.audio.play('break');
+      ui.notify.toast(`${ITEMS[itemId].name} quebrou! Fabrique outro no menu de fabricação.`, 'warning', ITEMS[itemId].icon);
+      this.ui.touch.setTorchAvailable(this.inventory.has('tocha'), this.player.torchOn);
+    });
     bus.on('item:crafted', () => this.stats.crafted++);
     bus.on('level:up', ({ level }) => {
       this.player.maxEnergy = this.progression.maxEnergy;
@@ -581,6 +614,7 @@ export class Game {
       );
       this.audio.play(r.node.def.sound, 0.9 + Math.random() * 0.2);
       this.player.playAction(r.toolUsed);
+      if (r.toolUsed !== 'none') this.inventory.wearTool(r.toolUsed);
       if (r.depleted && tall) {
         // A árvore cai: baque, tremor e poeira.
         window.setTimeout(() => {
@@ -721,6 +755,7 @@ export class Game {
         // Ignora o Esc que o navegador usou para liberar o mouse.
         if (performance.now() - this.lastUnexpectedUnlock < 250) return;
         if (this.ui.activePanel) this.ui.closePanel();
+        else if (this.fishing.active) this.fishing.stop();
         else if (this.building.mode !== 'none') this.cancelBuild();
         else this.ui.openPanel('pausa');
         break;
@@ -846,6 +881,22 @@ export class Game {
     this.player.setAvatar(model, ROBOT_HEIGHT);
   }
 
+  /** Fome e desgaste da tocha acesa. */
+  private updateSurvival(dt: number): void {
+    const p = this.player;
+    if (p.torchOn) this.inventory.wearTool('tocha', dt);
+    if (p.hunger <= 0 && this.hungerWarned < 2) {
+      this.hungerWarned = 2;
+      this.audio.play('error');
+      this.ui.notify.toast('Você está faminto! Sua energia não se recupera. Coma alguma coisa.', 'warning', 'fome');
+    } else if (p.hunger < 25 && this.hungerWarned < 1) {
+      this.hungerWarned = 1;
+      this.ui.notify.toast('Você está com fome. Coma frutas, peixe ou batata-doce.', 'warning', 'fome');
+    } else if (p.hunger >= 25) {
+      this.hungerWarned = 0;
+    }
+  }
+
   /** Anel de faíscas douradas ao subir de nível. */
   private levelUpBurst(): void {
     const p = this.player.position;
@@ -969,6 +1020,8 @@ export class Game {
     this.player.energy = this.player.maxEnergy;
     this.player.torchOn = false;
     this.player.buffTime = 0;
+    this.player.hunger = 100;
+    this.fishing?.stop();
     this.player.teleport(spawn.x, this.world.terrain.getHeight(spawn.x, spawn.z), spawn.z, Math.PI);
     this.currentRegionName = '';
     this.ui.hud.markQuestsDirty();
@@ -977,7 +1030,7 @@ export class Game {
 
   private applySave(data: SaveData): void {
     this.worldState.load({ flags: data.world.flags, regions: data.world.regions, explored: data.world.explored });
-    this.inventory.load(data.inventory);
+    this.inventory.load(data.inventory, data.durability);
     this.progression.load(data.progression);
     this.building.load(data.structures);
     this.world.resources.load(data.world.nodes);
@@ -995,6 +1048,7 @@ export class Game {
     this.player.energy = clamp(p.energy, 0, this.player.maxEnergy);
     this.player.torchOn = p.torch && this.inventory.has('tocha');
     this.player.buffTime = p.buffTime;
+    this.player.hunger = clamp(p.hunger, 0, 100);
   }
 
   private createSaveData(): SaveData {
@@ -1011,8 +1065,10 @@ export class Game {
         energy: p.energy,
         torch: p.torchOn,
         buffTime: p.buffTime,
+        hunger: p.hunger,
       },
       inventory: this.inventory.toJSON(),
+      durability: this.inventory.durabilityToJSON(),
       progression: this.progression.toJSON(),
       quests: this.quests.toJSON(),
       structures: this.building.toJSON(),
@@ -1100,16 +1156,18 @@ export class Game {
   useItem(id: ItemId): void {
     const def = ITEMS[id];
     if (!def.food) return;
-    if (this.player.energy >= this.player.maxEnergy - 0.5 && !def.food.buffSeconds) {
-      this.ui.notify.toast('Sua energia já está cheia.', 'info', 'raio');
+    const full = this.player.energy >= this.player.maxEnergy - 0.5 && this.player.hunger >= 99;
+    if (full && !def.food.buffSeconds) {
+      this.ui.notify.toast('Você está satisfeito e com energia cheia.', 'info', 'raio');
       return;
     }
     if (!this.inventory.remove(id, 1)) return;
-    this.player.eat(def.food.energy, def.food.buffSeconds);
+    this.player.eat(def.food.energy, def.food.buffSeconds, def.food.hunger);
+    this.hungerWarned = this.player.hunger < 25 ? this.hungerWarned : 0;
     this.bus.emit('item:used', { itemId: id });
     this.audio.play('eat');
     const extra = def.food.buffSeconds ? ' Você está bem alimentado!' : '';
-    this.ui.notify.toast(`Você comeu: ${def.name} (+${def.food.energy} energia).${extra}`, 'success', def.icon);
+    this.ui.notify.toast(`Você comeu: ${def.name} (+${def.food.hunger} saciedade, +${def.food.energy} energia).${extra}`, 'success', def.icon);
   }
 
   toggleTorch(): void {
@@ -1221,8 +1279,10 @@ export class Game {
         this.ui.panels.fabricacao.focusStation = station;
         this.ui.openPanel('fabricacao');
       },
+      openStorage: (structure: PlacedStructure) => this.ui.openStorage(structure),
       playerPosition: () => this.player.position,
       playerYaw: () => this.player.yaw,
+      playTime: () => this.playTime,
     };
   }
 
@@ -1231,6 +1291,7 @@ export class Game {
       const nextDay = this.world.dayNight.hour >= 7;
       this.world.dayNight.setTime(7, nextDay);
       this.player.energy = this.player.maxEnergy;
+      this.player.hunger = Math.max(0, this.player.hunger - 15);
     }, 900);
     await this.saveGame(false);
     this.ui.notify.toast(`Você dormiu bem. Bom dia! (Dia ${this.world.dayNight.day})`, 'success', 'sol');

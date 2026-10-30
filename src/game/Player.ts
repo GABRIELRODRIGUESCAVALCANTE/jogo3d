@@ -46,12 +46,16 @@ export class Player {
   grounded = true;
   swimming = false;
   energy = 100;
+  /** Saciedade: 100 = sem fome, 0 = faminto (a energia para de se recuperar). */
+  hunger = 100;
   maxEnergy = 100;
   /** Segundos restantes do bônus "Bem alimentado". */
   buffTime = 0;
   /** Velocidade horizontal atual (para animação e sons). */
   speed = 0;
   torchOn = false;
+  /** Pescando: segura a vara e não se move. */
+  fishing = false;
 
   readonly rig: CharacterRig;
 
@@ -168,8 +172,9 @@ export class Player {
   }
 
   /** Come algo: recupera energia. */
-  eat(energy: number, buffSeconds = 0): void {
+  eat(energy: number, buffSeconds = 0, hunger = 0): void {
     this.energy = Math.min(this.maxEnergy, this.energy + energy);
+    this.hunger = Math.min(100, this.hunger + hunger);
     if (buffSeconds > 0) this.buffTime = Math.max(this.buffTime, buffSeconds);
   }
 
@@ -192,6 +197,9 @@ export class Player {
     }
 
     // --- Energia e corrida ---
+    // A fome aumenta com o tempo (cerca de 25 minutos para esvaziar), mais rápido correndo ou nadando.
+    const effort = input.sprint && inputMag > 0.1 ? 2 : this.swimming ? 1.5 : 1;
+    this.hunger = Math.max(0, this.hunger - dt * 0.066 * effort);
     const buffed = this.buffTime > 0;
     if (this.buffTime > 0) this.buffTime = Math.max(0, this.buffTime - dt);
     const wantsRun = input.sprint && inputMag > 0.1 && !this.swimming && this.energy > 1;
@@ -200,7 +208,11 @@ export class Player {
       this.energyRegenDelay = 1;
     } else {
       this.energyRegenDelay -= dt;
-      if (this.energyRegenDelay <= 0) this.energy = Math.min(this.maxEnergy, this.energy + dt * (buffed ? 16 : 8));
+      // Com fome a energia volta devagar; faminto, não volta.
+      const hungerFactor = this.hunger <= 0 ? 0 : this.hunger < 25 ? 0.4 : 1;
+      if (this.energyRegenDelay <= 0) {
+        this.energy = Math.min(this.maxEnergy, this.energy + dt * (buffed ? 16 : 8) * hungerFactor);
+      }
     }
 
     // --- Água ---
@@ -343,7 +355,7 @@ export class Player {
       rig.rightArm.rotation.z = 0;
       rig.leftArm.rotation.x = damp(rig.leftArm.rotation.x, -0.3, 10, dt);
     } else {
-      const torchHold = this.torchOn ? -0.9 : 0;
+      const torchHold = this.fishing ? -1.1 : this.torchOn ? -0.9 : 0;
       rig.leftArm.rotation.x = damp(rig.leftArm.rotation.x, this.swimming ? -2.6 + Math.sin(this.walkPhase * 2) : -swing * 0.9, 14, dt);
       rig.rightArm.rotation.x = damp(rig.rightArm.rotation.x, this.swimming ? -2.6 - Math.sin(this.walkPhase * 2) : torchHold || swing * 0.9, 14, dt);
       rig.leftArm.rotation.z = damp(rig.leftArm.rotation.z, this.grounded ? 0.08 : 0.5, 10, dt);
@@ -370,7 +382,7 @@ export class Player {
     }
 
     // Ferramenta visível: a do golpe atual, ou a tocha acesa.
-    const shown: HeldTool = this.actionTime > 0 ? this.actionTool : this.torchOn ? 'tocha' : 'none';
+    const shown: HeldTool = this.actionTime > 0 ? this.actionTool : this.fishing ? 'vara' : this.torchOn ? 'tocha' : 'none';
     for (const [name, obj] of Object.entries(rig.tools)) obj.visible = name === shown;
     if (shown === 'tocha') {
       const flicker = 1 + Math.sin(performance.now() * 0.025) * 0.12 + Math.sin(performance.now() * 0.041) * 0.08;

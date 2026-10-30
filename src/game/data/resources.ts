@@ -104,6 +104,7 @@ export const NODE_KINDS: Record<NodeKind, NodeKindDef> = {
     hits: 3,
     amount: 1,
     toolBonus: { tool: 'machado', amount: 2 },
+    bonus: { item: 'semente', chance: 0.18 },
     respawn: 120,
     xp: 1,
     sound: 'leaves',

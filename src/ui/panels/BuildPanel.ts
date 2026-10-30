@@ -4,7 +4,7 @@
  */
 import type { Game } from '../../game/Game';
 import { ITEMS, type ItemId } from '../../game/data/items';
-import { STRUCTURES, STRUCTURE_ORDER, type StructureId } from '../../game/data/structures';
+import { STRUCTURES, STRUCTURE_ORDER, type StructureDef, type StructureId } from '../../game/data/structures';
 import { escapeHtml } from '../dom';
 import { icon } from '../icons';
 import type { UIManager } from '../UIManager';
@@ -27,7 +27,12 @@ export class BuildPanel extends Panel {
   render(): void {
     const g = this.game;
     const inv = g.inventory;
-    const cards = STRUCTURE_ORDER.map((id) => {
+    const groups: Array<[StructureDef['group'], string]> = [
+      ['basico', 'Essenciais'],
+      ['modular', 'Casa modular (encaixa numa grade de 2 m)'],
+      ['decoracao', 'Decoração'],
+    ];
+    const card = (id: StructureId) => {
       const def = STRUCTURES[id];
       const reason = g.building.canStart(id);
       const count = g.building.count(id);
@@ -45,12 +50,18 @@ export class BuildPanel extends Panel {
             ${reason ? `<small>${escapeHtml(reason)}</small>` : ''}
           </div>
         </article>`;
-    }).join('');
+    };
+    const cards = groups
+      .map(([group, title]) => {
+        const items = STRUCTURE_ORDER.filter((id) => STRUCTURES[id].group === group).map(card).join('');
+        return `<h3 class="build-group">${escapeHtml(title)}</h3>${items}`;
+      })
+      .join('');
 
     const hint =
       g.controlMode === 'touch'
         ? 'Depois de escolher, use os botões Girar e Construir. O fantasma fica verde quando o local é válido.'
-        : 'Depois de escolher: <kbd>R</kbd> gira, <kbd>E</kbd> ou clique constrói, <kbd>Esc</kbd> cancela. Verde = local válido.';
+        : 'Depois de escolher: <kbd>R</kbd> gira, <kbd>E</kbd> ou clique constrói, <kbd>Esc</kbd> cancela. Verde = local válido. Peças modulares continuam selecionadas para você construir várias seguidas.';
     this.body.innerHTML = `
       <p class="panel-hint">${hint}</p>
       <div class="recipe-list">${cards}</div>

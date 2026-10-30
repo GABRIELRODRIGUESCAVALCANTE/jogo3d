@@ -21,9 +21,11 @@ import type { Panel } from './panels/Panel';
 import { PauseMenu } from './panels/PauseMenu';
 import { QuestPanel } from './panels/QuestPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
+import { StoragePanel } from './panels/StoragePanel';
+import type { PlacedStructure } from '../game/Building';
 import { TouchControls } from './TouchControls';
 
-export type PanelId = 'inventario' | 'fabricacao' | 'construcao' | 'mapa' | 'missoes' | 'pausa' | 'opcoes' | 'ajuda';
+export type PanelId = 'inventario' | 'fabricacao' | 'construcao' | 'mapa' | 'missoes' | 'pausa' | 'opcoes' | 'ajuda' | 'bau';
 
 const TIPS = [
   'Dica: segure E (ou o botão de mão) para coletar sem parar.',
@@ -52,6 +54,7 @@ export class UIManager {
     pausa: PauseMenu;
     opcoes: SettingsPanel;
     ajuda: HelpPanel;
+    bau: StoragePanel;
   };
   private readonly panelLayer: HTMLElement;
   private readonly loadingEl: HTMLElement;
@@ -90,6 +93,7 @@ export class UIManager {
       pausa: new PauseMenu(this, game),
       opcoes: new SettingsPanel(this, game),
       ajuda: new HelpPanel(this, game),
+      bau: new StoragePanel(this, game),
     };
     for (const panel of Object.values(this.panels)) this.panelLayer.append(panel.el);
 
@@ -244,6 +248,14 @@ export class UIManager {
   closeAll(): void {
     this.panelHistory = [];
     while (this.activePanel) this.closePanel();
+  }
+
+  /** Abre o painel de um baú de armazenamento. */
+  openStorage(chest: PlacedStructure): void {
+    this.panels.bau.chest = chest;
+    this.panelHistory = [];
+    if (this.activePanel?.id === 'bau') this.panels.bau.refresh();
+    else this.openPanel('bau');
   }
 
   /** Redesenha um painel se ele estiver aberto. */

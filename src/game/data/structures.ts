@@ -4,7 +4,33 @@
 import type { ItemBundle } from './items';
 import type { StationId } from './recipes';
 
-export type StructureId = 'fogueira' | 'bancada' | 'cabana' | 'cerca' | 'caminho' | 'lanterna';
+export type StructureId =
+  | 'fogueira'
+  | 'bancada'
+  | 'cabana'
+  | 'cerca'
+  | 'caminho'
+  | 'lanterna'
+  | 'bau'
+  | 'canteiro'
+  | 'piso'
+  | 'parede'
+  | 'parede_porta'
+  | 'parede_janela'
+  | 'telhado';
+
+/**
+ * Peças modulares se encaixam numa grade de 2 m:
+ * - piso: ocupa uma célula;
+ * - parede: fica na borda entre duas células;
+ * - telhado: ocupa uma célula, apoiado no topo das paredes.
+ */
+export type ModularKind = 'piso' | 'parede' | 'telhado';
+
+/** Tamanho da célula da grade de construção modular (metros). */
+export const GRID = 2;
+/** Altura das paredes modulares. */
+export const WALL_HEIGHT = 2.6;
 
 export interface StructureDef {
   id: StructureId;
@@ -26,6 +52,10 @@ export interface StructureDef {
   light?: { color: number; intensity: number; distance: number; height: number; flicker: boolean };
   /** Possui colisão (o jogador não atravessa). */
   solid: boolean;
+  /** Peça modular (encaixa na grade). */
+  modular?: ModularKind;
+  /** Categoria no menu de construção. */
+  group: 'basico' | 'modular' | 'decoracao';
 }
 
 export const STRUCTURES: Record<StructureId, StructureDef> = {
@@ -42,6 +72,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     station: 'fogueira',
     light: { color: 0xff8a3d, intensity: 18, distance: 16, height: 1.1, flicker: true },
     solid: true,
+    group: 'basico',
   },
   bancada: {
     id: 'bancada',
@@ -55,6 +86,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     xp: 30,
     station: 'bancada',
     solid: true,
+    group: 'basico',
   },
   cabana: {
     id: 'cabana',
@@ -68,6 +100,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     xp: 80,
     limit: 3,
     solid: true,
+    group: 'basico',
   },
   cerca: {
     id: 'cerca',
@@ -80,6 +113,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     maxSlope: 1.2,
     xp: 4,
     solid: true,
+    group: 'decoracao',
   },
   caminho: {
     id: 'caminho',
@@ -92,6 +126,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     maxSlope: 0.6,
     xp: 3,
     solid: false,
+    group: 'decoracao',
   },
   lanterna: {
     id: 'lanterna',
@@ -105,10 +140,121 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     xp: 12,
     light: { color: 0x7ff3ff, intensity: 14, distance: 14, height: 2.5, flicker: false },
     solid: true,
+    group: 'decoracao',
+  },
+  bau: {
+    id: 'bau',
+    name: 'Baú de Armazenamento',
+    description: 'Guarde itens para liberar espaço e organizar seus recursos.',
+    icon: 'bau',
+    cost: { madeira: 10, corda: 2 },
+    minLevel: 2,
+    footprint: { w: 1.3, d: 0.9 },
+    maxSlope: 0.8,
+    xp: 15,
+    solid: true,
+    group: 'basico',
+  },
+  canteiro: {
+    id: 'canteiro',
+    name: 'Canteiro',
+    description: 'Plante sementes e colha batatas-doces depois de alguns minutos.',
+    icon: 'canteiro',
+    cost: { madeira: 4, pedra: 2 },
+    minLevel: 2,
+    footprint: { w: 2, d: 2 },
+    maxSlope: 0.7,
+    xp: 12,
+    solid: false,
+    group: 'basico',
+  },
+  piso: {
+    id: 'piso',
+    name: 'Piso de Madeira',
+    description: 'Base de 2×2 m. Paredes e telhados se encaixam nele.',
+    icon: 'piso',
+    cost: { madeira: 3 },
+    minLevel: 2,
+    footprint: { w: 2, d: 2 },
+    maxSlope: 1.6,
+    xp: 3,
+    solid: true,
+    modular: 'piso',
+    group: 'modular',
+  },
+  parede: {
+    id: 'parede',
+    name: 'Parede',
+    description: 'Parede de toras que se encaixa nas bordas da grade.',
+    icon: 'parede',
+    cost: { madeira: 4 },
+    minLevel: 2,
+    footprint: { w: 2, d: 0.3 },
+    maxSlope: 1.6,
+    xp: 3,
+    solid: true,
+    modular: 'parede',
+    group: 'modular',
+  },
+  parede_porta: {
+    id: 'parede_porta',
+    name: 'Parede com Porta',
+    description: 'Parede com uma passagem no meio.',
+    icon: 'parede_porta',
+    cost: { madeira: 3 },
+    minLevel: 2,
+    footprint: { w: 2, d: 0.3 },
+    maxSlope: 1.6,
+    xp: 3,
+    solid: true,
+    modular: 'parede',
+    group: 'modular',
+  },
+  parede_janela: {
+    id: 'parede_janela',
+    name: 'Parede com Janela',
+    description: 'Parede com uma janela para ver o mar.',
+    icon: 'parede_janela',
+    cost: { madeira: 3, corda: 1 },
+    minLevel: 2,
+    footprint: { w: 2, d: 0.3 },
+    maxSlope: 1.6,
+    xp: 3,
+    solid: true,
+    modular: 'parede',
+    group: 'modular',
+  },
+  telhado: {
+    id: 'telhado',
+    name: 'Telhado de Palha',
+    description: 'Cobre uma célula de 2×2 m. Precisa de paredes por perto para se apoiar.',
+    icon: 'telhado',
+    cost: { madeira: 2, fibra: 3 },
+    minLevel: 2,
+    footprint: { w: 2, d: 2 },
+    maxSlope: 99,
+    xp: 3,
+    solid: true,
+    modular: 'telhado',
+    group: 'modular',
   },
 };
 
-export const STRUCTURE_ORDER: StructureId[] = ['fogueira', 'bancada', 'cabana', 'cerca', 'caminho', 'lanterna'];
+export const STRUCTURE_ORDER: StructureId[] = [
+  'fogueira',
+  'bancada',
+  'cabana',
+  'bau',
+  'canteiro',
+  'piso',
+  'parede',
+  'parede_porta',
+  'parede_janela',
+  'telhado',
+  'cerca',
+  'caminho',
+  'lanterna',
+];
 
 export function isStructureId(value: string): value is StructureId {
   return value in STRUCTURES;
