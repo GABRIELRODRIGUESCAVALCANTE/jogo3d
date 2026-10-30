@@ -29,6 +29,7 @@ export class MapPanel extends Panel {
         <aside class="map-side">
           <h3>Regiões descobertas</h3>
           <ul class="region-list">${regions}</ul>
+          ${this.game.world.weather.misty ? `<div class="map-stat map-mist">${icon('nuvem')} Névoa densa: você não sabe onde está. Siga a trilha ou espere o amanhecer.</div>` : ''}
           <div class="map-stat">${icon('bussola')} Ilha explorada: <b>${Math.round(ws.exploredFraction(this.game.currentMap === this.game.auroraMap ? 'aurora' : 'principal') * 100)}%</b></div>
           <div class="map-legend">
             <span><i class="lg lg-player"></i>Você</span>

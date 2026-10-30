@@ -95,10 +95,21 @@ As teclas acima são as padrão; todas (menos o Esc) podem ser trocadas em **Op�
 - Inventário visual, comida que restaura energia e o bônus "Bem alimentado".
 - Fabricação: corda, machado, picareta, tocha, vara de pesca e comidas assadas (com estações: bancada e fogueira).
 - Construção com pré-visualização (verde/vermelho), rotação e remoção: fogueira, bancada, **cabana**, baú, canteiro, peças modulares, cerca, caminho e lanterna.
-- 22 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 3 opcionais, com recompensas e finais.
+- 25 missões: capítulo 1 (15), capítulo 2 na Ilha da Aurora (4) e 6 opcionais, com recompensas e finais.
 - Experiência e níveis (que desbloqueiam receitas e construções e aumentam a energia).
 - Mapa de exploração com névoa, minimapa giratório e feixe de luz que aponta o objetivo.
 - Ciclo de dia e noite (sol, lua, estrelas), luzes de fogueiras, lanternas e tocha; dormir na cabana pula a noite.
+- **Clima**: céu limpo, nublado, chuva e tempestade (com relâmpagos e trovões), que mudam sozinhos.
+  A chuva **apaga fogueiras ao relento** (as que estão sob um telhado ou dentro da cabana continuam acesas;
+  reacenda com 1 madeira quando parar), deixa o **mar agitado** (o barco balança, fica mais lento e, na
+  tempestade, é empurrado pelo vento) e, sem abrigo, dá fome mais rápido e cansa mais.
+- **Noite com risco leve** (sem combate): **vagalumes ladrões** aparecem às vezes e levam frutas da
+  bolsa se chegarem perto — a **tocha acesa os espanta**, e um abrigo protege. Algumas noites têm
+  **névoa densa**, que fecha a visão e **esconde o minimapa** (e a sua posição no mapa) até o amanhecer.
+- **Raposa de estimação**: ande devagar com frutas e as raposas ficam curiosas; dê 3 frutas a uma e
+  ela vira a **Brasa**, que segue você (até no barco), espera quando você pede e **fareja tesouros
+  enterrados** (8 na ilha principal e 4 na Aurora) e baús ainda fechados. Ela cava no lugar e o
+  tesouro aparece no mapa até ser escavado.
 - Salvamento automático (a cada minuto, ao concluir missões, ao construir e ao sair da aba), salvamento manual, carregamento e opção de **apagar o salvamento com confirmação**.
 - **Três espaços de salvamento**, com **exportar** (baixa um arquivo `.json`) e **importar** — para guardar uma cópia ou continuar em outro aparelho.
 - **Acessibilidade**: teclas configuráveis (Opções → Teclado), tamanho da interface, cores para daltonismo (azul/laranja) e "reduzir movimento" (sem tremor de câmera e com menos animações).

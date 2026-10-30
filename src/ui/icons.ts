@@ -189,6 +189,11 @@ export const ICONS: Record<string, string> = {
   raio: svg(`<path d="M18 2L7 18h8l-2 12 12-17h-8z" fill="#7bd88f" stroke="#3f9e57" stroke-width="1.5" stroke-linejoin="round"/>`),
   sol: svg(`<circle cx="16" cy="16" r="6.5" fill="#ffd166"/><path d="M16 3v4M16 25v4M3 16h4M25 16h4M6.8 6.8l2.8 2.8M22.4 22.4l2.8 2.8M6.8 25.2l2.8-2.8M22.4 9.6l2.8-2.8" stroke="#ffd166" stroke-width="2.4" stroke-linecap="round"/>`),
   lua: svg(`<path d="M21 4a12 12 0 1 0 7 17A10 10 0 0 1 21 4z" fill="#dfe7ff"/><circle cx="13" cy="15" r="1.6" fill="#b8c4ea"/><circle cx="17" cy="22" r="2" fill="#b8c4ea"/>`),
+  nuvem: svg(`<path d="M9 24a6 6 0 0 1-.6-12A8 8 0 0 1 23.5 10 6.5 6.5 0 0 1 24 24z" fill="#d6dde6" stroke="#8e9aa8" stroke-width="1.5" stroke-linejoin="round"/>`),
+  chuva: svg(`<path d="M9 19a5.5 5.5 0 0 1-.6-11A7.5 7.5 0 0 1 22.6 6.5 6 6 0 0 1 23 19z" fill="#aeb9c6" stroke="#6f7c8b" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 23l-1.5 4M16 23l-1.5 4M22 23l-1.5 4" stroke="#6fb7ff" stroke-width="2.2" stroke-linecap="round"/>`),
+  tempestade: svg(`<path d="M9 18a5.5 5.5 0 0 1-.6-11A7.5 7.5 0 0 1 22.6 5.5 6 6 0 0 1 23 18z" fill="#7d8794" stroke="#4a525e" stroke-width="1.5" stroke-linejoin="round"/><path d="M17 17l-4 7h4l-2 6 6-8h-4l2-5z" fill="#ffd166" stroke="#c99a2e" stroke-width="1" stroke-linejoin="round"/><path d="M9 22l-1.2 3.5M25 21l-1.2 3.5" stroke="#6fb7ff" stroke-width="2" stroke-linecap="round"/>`),
+  fogueira_apagada: svg(`<path d="M7 26l18-5M7 21l18 5" stroke="#6b4a2f" stroke-width="3" stroke-linecap="round"/><path d="M14 17c-2-3 1-5 0-9M19 16c-1-2 1-4 0-6" stroke="#9aa4ae" stroke-width="2" stroke-linecap="round" fill="none"/>`),
+  raposa: svg(`<path d="M6 6l5 7h10l5-7-1 11c0 6-4 10-9 10s-9-4-9-10z" fill="#e8743b"/><path d="M11 20c1.5 3 3 4 5 4s3.5-1 5-4c-2 1-3.5 1.5-5 1.5S13 21 11 20z" fill="#fff4e6"/><circle cx="12.5" cy="17" r="1.4" fill="#2b2b2b"/><circle cx="19.5" cy="17" r="1.4" fill="#2b2b2b"/><circle cx="16" cy="23" r="1.3" fill="#2b2b2b"/>`),
   bussola: svg(`<circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M16 6l3.5 10H12.5z" fill="#ff6b6b"/><path d="M16 26l-3.5-10h7z" fill="currentColor"/>`),
 };
 

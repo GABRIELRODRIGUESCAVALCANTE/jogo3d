@@ -16,6 +16,11 @@ export interface GameEvents {
   'tool:worn': { itemId: ItemId };
   'tool:broken': { itemId: ItemId };
   'fish:caught': { itemId: ItemId };
+  'campfire:lit': { id: string };
+  'fireflies:repelled': Record<string, never>;
+  'fireflies:stole': { amount: number };
+  'pet:tamed': Record<string, never>;
+  'treasure:dug': { id: string; total: number };
   'crop:harvested': { itemId: ItemId; amount: number };
   'structure:built': { type: StructureId; id: string };
   'structure:removed': { type: StructureId; id: string };

@@ -3,7 +3,9 @@
  *
  * A bordo: W/S (ou joystick) controlam a velocidade, A/D viram e E (ou o
  * botão de interagir) desembarca quando há praia por perto. O barco não sobe
- * na areia: ao encostar no fundo raso, ele para.
+ * na areia: ao encostar no fundo raso, ele para. Com chuva o mar fica
+ * agitado: o barco balança mais, anda mais devagar e, na tempestade, é
+ * empurrado pelo vento.
  */
 import * as THREE from 'three';
 import type { SoundName } from '../core/AudioManager';
@@ -74,21 +76,27 @@ export class BoatController {
     return true;
   }
 
-  update(dt: number, move: { x: number; y: number }, sprint: boolean, elapsed: number): void {
+  /** `waves`: agitação do mar (1 = calmo, ~2.8 = tempestade). */
+  update(dt: number, move: { x: number; y: number }, sprint: boolean, elapsed: number, waves = 1): void {
     const b = this.boat;
     if (!b) return;
     this.bumpCooldown -= dt;
 
     // Velocidade (ré é lenta) e direção.
-    const target = move.y >= 0 ? move.y * (sprint ? 18 : 12) : move.y * 4;
+    const rough = Math.max(0, waves - 1);
+    const slow = 1 - rough * 0.16;
+    const target = (move.y >= 0 ? move.y * (sprint ? 18 : 12) : move.y * 4) * slow;
     this.speed = damp(this.speed, target, 1.3, dt);
     const steer = 0.35 + Math.min(1, Math.abs(this.speed) / 6) * 0.75;
     b.rot -= move.x * steer * dt * (this.speed < 0 ? -1 : 1);
 
     const fx = Math.sin(b.rot);
     const fz = Math.cos(b.rot);
-    const nx = b.x + fx * this.speed * dt;
-    const nz = b.z + fz * this.speed * dt;
+    // Vento da tempestade: empurra o barco numa direção que muda devagar.
+    const gust = Math.max(0, waves - 1.9) * 1.6;
+    const windAngle = elapsed * 0.05;
+    const nx = b.x + fx * this.speed * dt + Math.cos(windAngle) * gust * dt;
+    const nz = b.z + fz * this.speed * dt + Math.sin(windAngle) * gust * dt;
     const dir = this.speed >= 0 ? 1 : -1;
     const probe = this.terrain.getHeight(nx + fx * BOW * dir, nz + fz * BOW * dir);
     const inSea = Math.hypot(nx - SEA_CENTER.x, nz - SEA_CENTER.z) < SEA_RADIUS;
@@ -107,8 +115,13 @@ export class BoatController {
 
     // Balanço na água e inclinação nas curvas.
     const root = b.model.root;
-    root.position.set(b.x, WATER_LEVEL + Math.sin(elapsed * 1.6) * 0.07, b.z);
-    root.rotation.set(Math.sin(elapsed * 1.1) * 0.03, b.rot, -move.x * 0.1 * Math.min(1, Math.abs(this.speed) / 10));
+    const bob = 0.07 + rough * 0.16;
+    root.position.set(b.x, WATER_LEVEL + Math.sin(elapsed * (1.6 + rough * 0.5)) * bob, b.z);
+    root.rotation.set(
+      Math.sin(elapsed * 1.1) * (0.03 + rough * 0.06),
+      b.rot,
+      -move.x * 0.1 * Math.min(1, Math.abs(this.speed) / 10) + Math.sin(elapsed * 0.8 + 1) * rough * 0.07,
+    );
     b.use?.position.set(b.x, WATER_LEVEL + 0.6, b.z);
     b.removal.position.set(b.x, WATER_LEVEL + 1, b.z);
 

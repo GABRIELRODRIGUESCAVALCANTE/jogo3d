@@ -72,8 +72,8 @@ export interface FishSchool {
   jumpTimer: number;
 }
 
-const FOX_FILE = 'raposa.glb';
-const FOX_LENGTH = 155;
+export const FOX_FILE = 'raposa.glb';
+export const FOX_LENGTH = 155;
 const UP = new THREE.Vector3(0, 1, 0);
 
 export class Wildlife {
@@ -81,6 +81,8 @@ export class Wildlife {
   readonly schools: FishSchool[] = [];
   /** Chamado quando um peixe entra ou sai da água (respingo). */
   onSplash: ((x: number, z: number) => void) | null = null;
+  /** O jogador anda devagar com frutas na bolsa: as raposas ficam curiosas e chegam perto. */
+  lure = false;
   private foxes: Fox[] = [];
   private crabs: Crab[] = [];
   private birds: Bird[] = [];
@@ -186,8 +188,13 @@ export class Wildlife {
       const dist = Math.hypot(dx, dz);
       if (dist > 140) continue; // longe demais: nem anima
 
-      const fear = playerRunning ? 11 : 6.5;
-      if (dist < fear) {
+      const fear = playerRunning ? 11 : this.lure ? 0 : 6.5;
+      if (this.lure && !playerRunning && dist < 14) {
+        // Curiosa: vem até perto do jogador e espera (dá para oferecer fruta).
+        fox.state = dist > 2.2 ? 'walk' : 'idle';
+        fox.targetYaw = Math.atan2(-dx, -dz);
+        fox.timer = 1;
+      } else if (dist < fear) {
         fox.state = 'run';
         fox.targetYaw = Math.atan2(dx, dz) + (this.random() - 0.5) * 0.6;
         fox.timer = 2.5;
@@ -486,6 +493,39 @@ export class Wildlife {
   }
 
   /** Cardume mais próximo de um ponto (para a pesca). */
+  /** Raposa selvagem mais próxima (índice) ou -1. */
+  nearestFox(x: number, z: number, maxDistance: number): number {
+    let best = -1;
+    let bestD = maxDistance;
+    this.foxes.forEach((f, i) => {
+      if (!f.root.visible) return;
+      const d = Math.hypot(f.x - x, f.z - z);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  foxPosition(index: number): { x: number; z: number; yaw: number } | null {
+    const f = this.foxes[index];
+    return f ? { x: f.x, z: f.z, yaw: f.yaw } : null;
+  }
+
+  /** Tira uma raposa da natureza (ela virou a raposa de estimação). */
+  removeFox(index: number): void {
+    const f = this.foxes[index];
+    if (!f) return;
+    this.group.remove(f.root);
+    this.foxes.splice(index, 1);
+  }
+
+  /** Quantas raposas selvagens existem (o modelo pode ainda estar carregando). */
+  get foxCount(): number {
+    return this.foxes.length;
+  }
+
   nearestSchool(x: number, z: number, maxDistance: number): FishSchool | null {
     let best: FishSchool | null = null;
     let bestD = maxDistance;

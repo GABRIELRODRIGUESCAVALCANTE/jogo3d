@@ -20,6 +20,8 @@ export interface MapView {
   playerYaw: number;
   cameraYaw: number;
   markers: MapMarker[];
+  /** Noite de névoa: o jogador não sabe onde está (a seta some do mapa). */
+  hidePlayer?: boolean;
 }
 
 const FOG = [233, 220, 192];
@@ -251,12 +253,14 @@ export class MapRenderer {
       this.drawMarker(ctx, m, unit * 1.2);
       ctx.restore();
     }
-    const [px, py] = toScreen(view.playerX, view.playerZ);
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(Math.PI - view.playerYaw);
-    this.drawPlayerArrow(ctx, unit * 1.3);
-    ctx.restore();
+    if (!view.hidePlayer) {
+      const [px, py] = toScreen(view.playerX, view.playerZ);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(Math.PI - view.playerYaw);
+      this.drawPlayerArrow(ctx, unit * 1.3);
+      ctx.restore();
+    }
 
     // Rosa dos ventos.
     ctx.save();

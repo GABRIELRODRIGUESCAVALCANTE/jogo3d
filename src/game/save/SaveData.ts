@@ -55,8 +55,12 @@ export interface SaveData {
     /** Névoa do mapa da Ilha da Aurora. */
     exploredAurora?: string;
     nodes: Record<string, NodeSave>;
+    /** Clima atual e segundos até a próxima mudança. */
+    weather?: { kind: string; timer: number; mist?: boolean };
   };
   stats: { gathered: number; crafted: number; built: number };
+  /** Raposa de estimação (posição, se está esperando) e frutas já dadas. */
+  pet?: { x?: number; z?: number; stay?: boolean; tameProgress: number };
 }
 
 /** Resumo exibido no menu inicial ("Continuar"). */
@@ -157,8 +161,20 @@ export function validateSave(input: unknown): SaveData | null {
       regions: Array.isArray(world.regions) ? world.regions.filter((r): r is string => typeof r === 'string') : [],
       explored: typeof world.explored === 'string' ? world.explored : '',
       exploredAurora: typeof world.exploredAurora === 'string' ? world.exploredAurora : '',
+      weather:
+        isObj(world.weather) && typeof world.weather.kind === 'string' && isNum(world.weather.timer)
+          ? { kind: world.weather.kind, timer: world.weather.timer, ...(world.weather.mist === true ? { mist: true } : {}) }
+          : undefined,
       nodes,
     },
+    pet: isObj(data.pet)
+      ? {
+          x: isNum(data.pet.x) ? data.pet.x : undefined,
+          z: isNum(data.pet.z) ? data.pet.z : undefined,
+          stay: data.pet.stay === true,
+          tameProgress: isNum(data.pet.tameProgress) ? Math.max(0, Math.floor(data.pet.tameProgress)) : 0,
+        }
+      : undefined,
     stats: {
       gathered: isNum(stats.gathered) ? stats.gathered : 0,
       crafted: isNum(stats.crafted) ? stats.crafted : 0,

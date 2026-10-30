@@ -113,7 +113,7 @@ export class Sky {
       emissive: new THREE.Color('#5d6f86'),
       emissiveIntensity: 0.35,
     });
-    const cloudCount = 16;
+    const cloudCount = 40;
     this.clouds = new THREE.InstancedMesh(cloudGeo, this.cloudMaterial, cloudCount);
     for (let i = 0; i < cloudCount; i++) {
       const angle = random() * Math.PI * 2;
@@ -144,6 +144,11 @@ export class Sky {
   setCloudTint(color: THREE.Color, emissive: THREE.Color): void {
     this.cloudMaterial.color.copy(color);
     this.cloudMaterial.emissive.copy(emissive);
+  }
+
+  /** Mais nuvens quando o céu fecha (0 = limpo, 1 = tempestade). */
+  setCloudCover(cover: number): void {
+    this.clouds.count = Math.round(12 + cover * 28);
   }
 
   update(dt: number): void {

@@ -126,6 +126,34 @@ export const QUESTS: QuestDef[] = [
     target: { x: 0, z: 140 },
   },
   {
+    id: 'q_vagalumes',
+    title: 'Luz Contra os Ladrões',
+    description:
+      'À noite, vagalumes ladrões tentam levar suas frutas. Fabrique uma tocha e acenda-a (tecla T ou o botão da tocha) quando eles chegarem perto para espantá-los.',
+    objectives: [{ type: 'interact', target: 'vagalumes_espantados', label: 'Espante os vagalumes com a tocha' }],
+    requires: ['q_ferramentas'],
+    rewards: { xp: 50, items: { fruta: 3 } },
+    completeText: 'Os vagalumes aprenderam a lição: frutas, só com licença!',
+  },
+  {
+    id: 'q_raposa',
+    title: 'Uma Amiga Peluda',
+    description:
+      'As raposas da ilha fogem de quem corre, mas ficam curiosas com quem anda devagar levando frutas. Chegue perto de uma e ofereça 3 frutas.',
+    objectives: [{ type: 'interact', target: 'raposa_domesticada', label: 'Domestique uma raposa com frutas' }],
+    requires: ['q_madeira'],
+    rewards: { xp: 40 },
+    completeText: 'A Brasa agora vai aonde você for — e o faro dela é ótimo!',
+  },
+  {
+    id: 'q_tesouros',
+    title: 'Faro de Tesouro',
+    description: 'Explore a ilha com a Brasa. Quando ela farejar algo e cavar, chegue perto e escave o tesouro.',
+    objectives: [{ type: 'interact', target: 'tesouros_3', label: 'Escave 3 tesouros enterrados' }],
+    requires: ['q_raposa'],
+    rewards: { xp: 90, items: { cristal: 2 } },
+  },
+  {
     id: 'q_horta',
     title: 'Mãos na Terra',
     description: 'Arranque capim para achar sementes, construa um canteiro, plante e espere crescer para colher batatas-doces.',

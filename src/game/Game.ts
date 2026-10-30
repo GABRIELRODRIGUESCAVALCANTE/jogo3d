@@ -11,6 +11,8 @@ import { clamp, smoothstep } from '../core/math';
 import { DAY_LENGTH_SECONDS, QUALITY_PRESETS, Settings } from '../core/Settings';
 import { BuildingSystem, type PlacedStructure } from './Building';
 import { FishingSystem } from './Fishing';
+import { FireflyThieves } from './Fireflies';
+import { PetSystem } from './Pet';
 import { BoatController } from './Boat';
 import { AURORA_CENTER } from './world/islands';
 import { WORLD_LIMIT_RADIUS, distanceToPaths } from './world/layout';
@@ -37,6 +39,7 @@ import { LocalStorageProvider } from './save/StorageProvider';
 import { SaveSystem } from './SaveSystem';
 import { World } from './World';
 import { WorldState } from './WorldState';
+import { type WeatherKind, WEATHER_NAMES } from './Weather';
 import { PLACES } from './world/layout';
 import { Wildlife } from './world/Wildlife';
 import { ModelLibrary } from './models/ModelLibrary';
@@ -49,6 +52,8 @@ import { icon } from '../ui/icons';
 export type GameState = 'loading' | 'menu' | 'playing';
 
 const AUTOSAVE_SECONDS = 60;
+/** Chance de uma noite ter névoa densa. */
+const MIST_CHANCE = 0.35;
 /** Altura do modelo robo.glb nas unidades do próprio arquivo. */
 const ROBOT_HEIGHT = 4.79;
 const MENU_FOCUS = new THREE.Vector3(10, 4, 30);
@@ -78,6 +83,8 @@ export class Game {
   readonly models = new ModelLibrary();
   wildlife!: Wildlife;
   fishing!: FishingSystem;
+  fireflies!: FireflyThieves;
+  pet!: PetSystem;
   boatCtl!: BoatController;
   auroraWildlife: Wildlife | null = null;
   readonly player = new Player();
@@ -146,6 +153,10 @@ export class Game {
   };
   /** 0 = sem aviso; 1 = avisou "com fome"; 2 = avisou "faminto". */
   private hungerWarned = 0;
+  /** Trovões esperando para tocar (segundos até o som). */
+  private thunders: number[] = [];
+  /** Era noite no quadro anterior (para perceber anoitecer e amanhecer). */
+  private wasNight = false;
   private characterLoaded = '';
   /** A câmera não atravessa paredes de construções, rochas da caverna e pilares. */
   private readonly cameraBlocked = (x: number, y: number, z: number) => this.collision.blocksCamera(x, y, z);
@@ -260,6 +271,39 @@ export class Game {
       this.auroraMap = new MapRenderer(this.world.terrain, this.worldState.grids.aurora, auroraPathDistance);
     };
     this.world.scene.add(this.fishing.group);
+    this.fireflies = new FireflyThieves(this.player, this.world.terrain, this.lights, this.bus, {
+      count: (item) => this.inventory.count(item),
+      take: (item, amount) => this.inventory.remove(item, amount),
+      safe: () => this.sheltered() || this.boatCtl.active || this.player.swimming,
+      notify: (text, kind) => this.ui.notify.toast(text, kind, kind === 'success' ? 'tocha' : 'fruta'),
+      addXP: (n) => this.progression.addXP(n),
+    });
+    this.world.scene.add(this.fireflies.group);
+    this.bus.on('fireflies:repelled', () => this.worldState.setFlag('vagalumes_espantados'));
+    this.pet = new PetSystem(this.player, this.world.terrain, this.wildlife, this.models, this.bus, {
+      fruitCount: () => this.inventory.count('fruta'),
+      takeFruit: () => this.inventory.remove('fruta', 1),
+      give: (bundle) => this.giveItems(bundle),
+      notify: (text, kind) => this.ui.notify.toast(text, kind ?? 'info', 'raposa'),
+      sound: (name) => this.audio.play(name),
+      burst: (pos, color, count) => this.particles.burst(pos, color, count, { up: 3, speed: 1.5 }),
+      addXP: (n) => this.progression.addXP(n),
+      hasFlag: (f) => this.worldState.hasFlag(f),
+      setFlag: (f) => this.worldState.setFlag(f),
+      closedChests: () => this.closedChests(),
+      boatSeat: () => {
+        const b = this.boatCtl.boat;
+        if (!b) return null;
+        const root = b.model.root;
+        return { x: root.position.x + Math.sin(b.rot) * 1.2, y: root.position.y + 0.3, z: root.position.z + Math.cos(b.rot) * 1.2, yaw: b.rot };
+      },
+    });
+    this.world.scene.add(this.pet.group);
+    this.interaction.addProvider(this.pet);
+    this.bus.on('treasure:dug', ({ total }) => {
+      if (total >= 3) this.worldState.setFlag('tesouros_3');
+    });
+    this.wireWeather();
 
     this.torchLight = this.lights.add({
       position: new THREE.Vector3(),
@@ -373,7 +417,7 @@ export class Game {
       const sailing = this.boatCtl.active;
       if (sailing) {
         // A bordo: o movimento controla o barco; E desembarca.
-        this.boatCtl.update(dt, input.getMove(), input.isSprinting(), this.elapsed);
+        this.boatCtl.update(dt, input.getMove(), input.isSprinting(), this.elapsed, this.world.weather.waves);
         if (input.actionPressed('interact') && this.boatCtl.disembark()) {
           this.player.stand();
           this.cameraCtl.distance = this.cameraDistanceBeforeBoat;
@@ -409,7 +453,11 @@ export class Game {
       for (const rm of this.world.resourceManagers) rm.update(dt, this.playTime, this.player.position);
       this.checkAurora();
       this.fishing.update(dt);
+      this.fireflies.update(dt, this.world.dayNight.night, !this.boatCtl.active && !this.inCave);
+      this.wildlife.lure = !this.pet.tamed && this.player.speed < 6.5 && this.inventory.has('fruta');
+      this.pet.update(dt);
       this.updateSurvival(dt);
+      this.updateNight();
 
       // Poeira nos pés ao correr.
       this.dustTimer -= dt;
@@ -491,6 +539,7 @@ export class Game {
       const coast = 1 - smoothstep(1.5, 9, ground);
       const altitude = smoothstep(10, 40, p.y);
       this.audio.setAmbience(1 - this.world.dayNight.night, coast, altitude, this.inCave);
+      this.audio.setRain(this.world.weather.rain, this.sheltered());
     }
 
     this.autosaveTimer -= dt;
@@ -975,10 +1024,76 @@ export class Game {
     return out;
   }
 
-  /** Fome e desgaste da tocha acesa. */
+  /** Avisos de mudança do clima e trovões depois dos relâmpagos. */
+  private wireWeather(): void {
+    const weather = this.world.weather;
+    weather.onChange = (kind) => {
+      if (this.state !== 'playing') return;
+      const fires = this.building.count('fogueira') > 0 ? ' Fogueiras ao relento vão apagar.' : '';
+      switch (kind) {
+        case 'nublado':
+          this.ui.notify.toast('O céu está ficando nublado…', 'info', 'nuvem');
+          break;
+        case 'chuva':
+          this.ui.notify.toast(`Começou a chover. Procure um abrigo.${fires}`, 'info', 'chuva');
+          break;
+        case 'tempestade':
+          this.ui.notify.toast(`Tempestade chegando! O mar fica agitado e o barco, difícil de controlar.${fires}`, 'warning', 'tempestade');
+          break;
+        case 'limpo':
+          this.ui.notify.toast('O céu abriu. Que dia bonito!', 'success', 'sol');
+          break;
+      }
+    };
+    weather.onLightning = (distance) => {
+      if (this.state !== 'playing') return;
+      // O som chega depois do clarão (velocidade do som, um pouco acelerada).
+      this.thunders.push(distance / 500);
+      if (distance < 400) this.cameraCtl.shake(0.15);
+    };
+  }
+
+  /** Ao anoitecer, às vezes uma névoa densa cobre a ilha (e some ao amanhecer). */
+  private updateNight(): void {
+    const dn = this.world.dayNight;
+    const night = dn.isNight;
+    if (night === this.wasNight) return;
+    this.wasNight = night;
+    const weather = this.world.weather;
+    if (night) {
+      // Nunca na primeira noite: o jogador ainda está aprendendo.
+      if (dn.day > 1 && Math.random() < MIST_CHANCE) {
+        weather.setMist(true);
+        this.ui.notify.toast('Uma névoa densa cobre a ilha. O minimapa não funciona na névoa: cuidado para não se perder!', 'warning', 'nuvem');
+      }
+    } else if (weather.mistNight) {
+      weather.setMist(false);
+      this.ui.notify.toast('O sol nasceu e a névoa se dissipou.', 'success', 'sol');
+    }
+  }
+
+  /** Abrigado da chuva: sob um telhado, na cabana, na caverna ou a bordo? */
+  private sheltered(): boolean {
+    const p = this.player.position;
+    return this.inCave || this.building.isSheltered(p.x, p.z, p.y);
+  }
+
+  /** Fome, desgaste da tocha acesa, chuva sobre o jogador e trovões. */
   private updateSurvival(dt: number): void {
     const p = this.player;
     if (p.torchOn) this.inventory.wearTool('tocha', dt);
+    const weather = this.world.weather;
+    const sheltered = this.sheltered();
+    p.exposure = sheltered ? 0 : Math.max(0, (weather.rain - 0.3) / 0.7);
+    // A chuva também gasta a tocha mais rápido.
+    if (p.torchOn && p.exposure > 0) this.inventory.wearTool('tocha', dt * p.exposure);
+    for (let i = this.thunders.length - 1; i >= 0; i--) {
+      this.thunders[i] -= dt;
+      if (this.thunders[i] <= 0) {
+        this.thunders.splice(i, 1);
+        this.audio.play('thunder');
+      }
+    }
     if (p.hunger <= 0 && this.hungerWarned < 2) {
       this.hungerWarned = 2;
       this.audio.play('error');
@@ -1015,6 +1130,9 @@ export class Game {
     const summary = await this.saveSystem.summary();
     this.hasSave = summary !== null;
     this.world.dayNight.setTime(16.8);
+    this.world.weather.set('limpo', undefined, true);
+    this.world.weather.setMist(false, true);
+    this.audio.setRain(0, false);
     this.world.questBeacon.visible = false;
     this.world.targetMarker.visible = false;
     this.ui.setControlMode(this.controlMode, false);
@@ -1178,6 +1296,13 @@ export class Game {
     this.quests.reset();
     this.world.dayNight.day = 1;
     this.world.dayNight.setTime(8);
+    // O primeiro dia começa sempre com céu limpo.
+    this.world.weather.set('limpo', 600, true);
+    this.world.weather.setMist(false, true);
+    this.fireflies?.reset();
+    this.pet?.reset();
+    this.wasNight = this.world.dayNight.isNight;
+    this.thunders = [];
     this.playTime = 0;
     this.stats = { gathered: 0, crafted: 0, built: 0 };
     const spawn = PLACES.spawn;
@@ -1216,6 +1341,12 @@ export class Game {
     this.quests.evaluateAll();
     this.world.dayNight.day = Math.max(1, Math.floor(data.world.day));
     this.world.dayNight.setTime(data.world.time);
+    const w = data.world.weather;
+    this.world.weather.set(w && w.kind in WEATHER_NAMES ? (w.kind as WeatherKind) : 'limpo', w ? Math.max(5, w.timer) : undefined, true);
+    this.world.weather.setMist(!!w?.mist && this.world.dayNight.isNight, true);
+    this.fireflies.reset();
+    this.wasNight = this.world.dayNight.isNight;
+    this.thunders = [];
     this.playTime = data.playTime;
     this.stats = { ...data.stats };
     const p = data.player;
@@ -1226,6 +1357,7 @@ export class Game {
     this.player.torchOn = p.torch && this.inventory.has('tocha');
     this.player.buffTime = p.buffTime;
     this.player.hunger = clamp(p.hunger, 0, 100);
+    this.pet.load(data.pet, data.pet?.tameProgress ?? 0);
   }
 
   private createSaveData(): SaveData {
@@ -1257,8 +1389,10 @@ export class Game {
         explored: this.worldState.exploredToBase64('principal'),
         exploredAurora: this.worldState.exploredToBase64('aurora'),
         nodes: this.saveNodes(),
+        weather: this.world.weather.toJSON(),
       },
       stats: { ...this.stats },
+      pet: { ...this.pet.toJSON(), tameProgress: this.pet.tameProgress },
     };
   }
 
@@ -1393,6 +1527,16 @@ export class Game {
     return quest?.target ?? null;
   }
 
+  /** Baús da história ainda fechados. */
+  closedChests(): Array<{ x: number; z: number }> {
+    const chests: Array<[string, { x: number; z: number }]> = [
+      ['bau_praia', PLACES.chestBeach],
+      ['bau_floresta', PLACES.chestForest],
+      ['bau_caverna', PLACES.chestCave],
+    ];
+    return chests.filter(([flag]) => !this.worldState.hasFlag(flag)).map(([, pos]) => pos);
+  }
+
   /** Dados para desenhar o mapa e o minimapa. */
   mapView(full = false): MapView {
     const markers: MapMarker[] = [];
@@ -1411,14 +1555,11 @@ export class Game {
       AURORA_PLACES.pylonSouth,
     ];
     for (const l of landmarks) if (ws.isExplored(l.x, l.z)) markers.push({ x: l.x, z: l.z, type: 'landmark' });
-    const chests: Array<[string, { x: number; z: number }]> = [
-      ['bau_praia', PLACES.chestBeach],
-      ['bau_floresta', PLACES.chestForest],
-      ['bau_caverna', PLACES.chestCave],
-    ];
-    for (const [flag, pos] of chests) {
-      if (!ws.hasFlag(flag) && ws.isExplored(pos.x, pos.z)) markers.push({ x: pos.x, z: pos.z, type: 'chest' });
+    for (const pos of this.closedChests()) {
+      if (ws.isExplored(pos.x, pos.z)) markers.push({ x: pos.x, z: pos.z, type: 'chest' });
     }
+    // Tesouros que a raposa achou e ainda não foram escavados.
+    for (const t of this.pet.foundTreasures) markers.push({ x: t.x, z: t.z, type: 'chest' });
     const target = this.questTarget();
     if (target) markers.push({ x: target.x, z: target.z, type: 'quest' });
     return {
@@ -1427,6 +1568,7 @@ export class Game {
       playerYaw: this.player.yaw,
       cameraYaw: full ? 0 : this.cameraCtl.yaw,
       markers,
+      hidePlayer: this.world.weather.misty,
     };
   }
 
@@ -1491,6 +1633,7 @@ export class Game {
       playerPosition: () => this.player.position,
       playerYaw: () => this.player.yaw,
       playTime: () => this.playTime,
+      raining: () => this.world.weather.raining,
     };
   }
 
@@ -1498,6 +1641,8 @@ export class Game {
     await this.ui.fade(() => {
       const nextDay = this.world.dayNight.hour >= 7;
       this.world.dayNight.setTime(7, nextDay);
+      this.world.weather.setMist(false, true);
+      this.fireflies.reset();
       this.player.energy = this.player.maxEnergy;
       this.player.hunger = Math.max(0, this.player.hunger - 15);
     }, 900);

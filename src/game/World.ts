@@ -14,6 +14,7 @@ import { Sky } from './world/Sky';
 import { TerrainSet } from './world/Terrain';
 import { AURORA_CENTER, ISLAND_SHAPES } from './world/islands';
 import { AuroraLandmarks } from './world/AuroraLandmarks';
+import { WeatherSystem } from './Weather';
 import { Water } from './world/Water';
 
 export type ProgressCallback = (fraction: number, label: string) => Promise<void>;
@@ -27,6 +28,7 @@ export class World {
   readonly terrain = new TerrainSet(ISLAND_SHAPES);
   readonly sky = new Sky();
   readonly dayNight: DayNight;
+  readonly weather = new WeatherSystem();
   water!: Water;
   resources!: ResourceManager;
   decorations!: Decorations;
@@ -68,6 +70,7 @@ export class World {
     this.scene.add(lights.group);
 
     this.dayNight = new DayNight(this.sky, this.sun, this.hemi, this.fog);
+    this.scene.add(this.weather.rainMesh);
 
     this.questBeacon = new THREE.Mesh(
       new THREE.CylinderGeometry(0.5, 0.9, 90, 10, 1, true),
@@ -178,8 +181,10 @@ export class World {
 
   private applyFog(): void {
     const distance = this.menuView ? Math.max(this.renderDistance, 340) : this.renderDistance;
-    this.fog.near = distance * 0.3;
-    this.fog.far = distance;
+    // Chuva, tempestade e noites de névoa fecham a visão.
+    const factor = this.menuView ? 1 : this.weather.fogMultiplier;
+    this.fog.near = distance * 0.3 * factor;
+    this.fog.far = distance * factor;
   }
 
   setShadows(enabled: boolean, mapSize: number): void {
@@ -205,6 +210,12 @@ export class World {
     this.sky.follow(camera.position);
     if (simulate) this.dayNight.update(dt);
     else this.dayNight.apply();
+    // Clima por cima das cores do dia/noite.
+    this.weather.update(dt, elapsed, camera.position, simulate);
+    this.weather.applyVisuals({ sky: this.sky.uniforms, sun: this.sun, hemi: this.hemi, fog: this.fog });
+    this.water.setWaves(this.weather.waves);
+    this.sky.setCloudCover(this.weather.cover);
+    this.applyFog();
     this.landmarks.update(dt, elapsed);
 
     // Sol/lua acompanham o jogador para que as sombras fiquem sempre por perto.

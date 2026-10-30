@@ -18,7 +18,7 @@ import { ITEMS, isItemId, type ItemBundle, type ItemId } from './data/items';
 import type { StationId } from './data/recipes';
 import { GRID, STRUCTURES, WALL_HEIGHT, isStructureId, type StructureDef, type StructureId } from './data/structures';
 import type { GameEventBus, NotifyKind } from './events';
-import type { Interactable, InteractableProvider } from './InteractionSystem';
+import type { InteractAction, Interactable, InteractableProvider } from './InteractionSystem';
 import type { Inventory } from './Inventory';
 import type { LightManager, LightSource } from './LightManager';
 import { createStructureModel, type StructureModel } from './models/structures';
@@ -48,6 +48,8 @@ export interface BuildingHooks {
   playTime(): number;
   hasFlag(flag: string): boolean;
   boardBoat(structure: PlacedStructure): void;
+  /** Está chovendo forte o bastante para apagar fogueiras. */
+  raining(): boolean;
 }
 
 export interface PlacedStructure {
@@ -73,6 +75,10 @@ export interface PlacedStructure {
   lidOpen?: number;
   /** Barco com o jogador a bordo (não pode ser removido). */
   boarded?: boolean;
+  /** Fogueira acesa (a chuva apaga as que estão ao relento). */
+  lit?: boolean;
+  /** Segundos de chuva que a fogueira já tomou (apaga ao chegar a RAIN_TO_EXTINGUISH). */
+  wetness?: number;
 }
 
 export type BuildMode = 'none' | 'place' | 'remove';
@@ -84,6 +90,9 @@ export interface PlacementCheck {
 }
 
 let structureCounter = 0;
+
+/** Segundos de chuva ao relento até a fogueira apagar. */
+const RAIN_TO_EXTINGUISH = 6;
 
 /** Centro da célula da grade que contém a coordenada. */
 const cellCenter = (v: number) => Math.floor(v / GRID) * GRID + GRID / 2;
@@ -135,7 +144,28 @@ export class BuildingSystem implements InteractableProvider {
   }
 
   isNearStation(station: StationId, pos: THREE.Vector3, radius = 6): boolean {
-    return this.structures.some((s) => s.def.station === station && Math.hypot(s.x - pos.x, s.z - pos.z) <= radius);
+    return this.structures.some(
+      (s) => s.def.station === station && s.lit !== false && Math.hypot(s.x - pos.x, s.z - pos.z) <= radius,
+    );
+  }
+
+  /** Há um telhado (modular ou da cabana) sobre este ponto? */
+  isSheltered(x: number, z: number, y?: number): boolean {
+    for (const s of this.structures) {
+      if (s.def.modular === 'telhado') {
+        if (Math.abs(x - s.x) <= GRID / 2 + 0.15 && Math.abs(z - s.z) <= GRID / 2 + 0.15 && (y === undefined || y < s.y)) return true;
+      } else if (s.type === 'cabana') {
+        // Coordenadas locais da cabana (6 x 5 m).
+        const dx = x - s.x;
+        const dz = z - s.z;
+        const cos = Math.cos(s.rot);
+        const sin = Math.sin(s.rot);
+        const lx = dx * cos - dz * sin;
+        const lz = dx * sin + dz * cos;
+        if (Math.abs(lx) <= 3.2 && Math.abs(lz) <= 2.7 && (y === undefined || y < s.y + 3)) return true;
+      }
+    }
+    return false;
   }
 
   /** Zonas de câmera: cabanas e telhados modulares (escondem o teto lá dentro). */
@@ -256,7 +286,8 @@ export class BuildingSystem implements InteractableProvider {
         const k = 1 - (1 - s.buildAnim) ** 3;
         s.model.root.scale.set(1, Math.max(0.01, k), 1);
       }
-      if (s.model.flames) {
+      if (s.type === 'fogueira') this.updateCampfireRain(s, dt);
+      if (s.model.flames && s.lit !== false) {
         if (s.type === 'fogueira') {
           s.model.flames.children.forEach((f, i) => {
             const t = this.time * (8 + i * 3) + i;
@@ -549,12 +580,14 @@ export class BuildingSystem implements InteractableProvider {
       }
       case 'fogueira':
         circle(0.75, 0.9);
+        structure.lit = data?.lit !== 0;
+        structure.wetness = 0;
         structure.use = {
           id: `${structure.id}:usar`,
           position: new THREE.Vector3(x, y + 0.5, z),
           radius: 1,
-          getAction: () => ({ label: 'Cozinhar na fogueira', enabled: true }),
-          interact: () => this.hooks.openCrafting('fogueira'),
+          getAction: () => this.campfireAction(structure),
+          interact: () => (structure.lit ? this.hooks.openCrafting('fogueira') : this.relight(structure)),
         };
         break;
       case 'bancada':
@@ -652,6 +685,7 @@ export class BuildingSystem implements InteractableProvider {
     };
 
     this.structures.push(structure);
+    if (structure.lit === false) this.setLit(structure, false);
     if (type === 'canteiro') this.updateGardenVisual(structure, this.hooks.playTime());
     if (def.modular === 'telhado') this.rebuildRoofZones();
     return structure;
@@ -785,6 +819,52 @@ export class BuildingSystem implements InteractableProvider {
   }
 
   // ---------------------------------------------------------------------------
+  // Fogueiras e chuva
+  // ---------------------------------------------------------------------------
+
+  private campfireAction(s: PlacedStructure): InteractAction {
+    if (s.lit) return { label: 'Cozinhar na fogueira', enabled: true };
+    if (this.hooks.raining() && !this.isSheltered(s.x, s.z)) {
+      return { label: 'Reacender fogueira', enabled: false, reason: 'Está chovendo: espere passar ou construa um telhado em cima' };
+    }
+    if (!this.hooks.inventory.has('madeira')) return { label: 'Reacender fogueira', enabled: false, reason: 'Requer 1 Madeira' };
+    return { label: 'Reacender fogueira (1 madeira)', enabled: true };
+  }
+
+  private relight(s: PlacedStructure): void {
+    if (!this.hooks.inventory.remove('madeira', 1)) return;
+    this.setLit(s, true);
+    s.wetness = 0;
+    this.hooks.sound('craft');
+    this.hooks.burst(new THREE.Vector3(s.x, s.y + 0.6, s.z), '#ffb347', 10);
+    this.hooks.notify('A fogueira voltou a queimar.');
+    this.bus.emit('campfire:lit', { id: s.id });
+  }
+
+  private setLit(s: PlacedStructure, lit: boolean): void {
+    s.lit = lit;
+    if (s.model.flames) s.model.flames.visible = lit;
+    if (s.light) s.light.enabled = lit;
+  }
+
+  private updateCampfireRain(s: PlacedStructure, dt: number): void {
+    if (!s.lit) return;
+    if (!this.hooks.raining() || this.isSheltered(s.x, s.z)) {
+      s.wetness = Math.max(0, (s.wetness ?? 0) - dt);
+      return;
+    }
+    s.wetness = (s.wetness ?? 0) + dt;
+    if (s.wetness < RAIN_TO_EXTINGUISH) return;
+    this.setLit(s, false);
+    this.hooks.burst(new THREE.Vector3(s.x, s.y + 0.8, s.z), '#9aa4ae', 12);
+    const p = this.hooks.playerPosition();
+    if (Math.hypot(p.x - s.x, p.z - s.z) < 45) {
+      this.hooks.sound('splash');
+      this.hooks.notify('A chuva apagou a fogueira! Reacenda quando parar (ou construa um telhado em cima).');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Telhados modulares
   // ---------------------------------------------------------------------------
 
@@ -810,6 +890,7 @@ export class BuildingSystem implements InteractableProvider {
       if (s.def.modular) save.y = s.y;
       if (s.storage) save.data = Object.fromEntries(s.storage);
       if (s.type === 'canteiro') save.data = { plantedAt: s.plantedAt ?? -1 };
+      if (s.type === 'fogueira' && s.lit === false) save.data = { lit: 0 };
       return save;
     });
   }

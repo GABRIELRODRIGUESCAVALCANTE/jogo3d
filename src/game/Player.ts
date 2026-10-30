@@ -50,6 +50,8 @@ export class Player {
   energy = 100;
   /** Saciedade: 100 = sem fome, 0 = faminto (a energia para de se recuperar). */
   hunger = 100;
+  /** Chuva sobre o jogador ao relento (0 a 1): cansa e dá fome mais rápido. */
+  exposure = 0;
   maxEnergy = 100;
   /** Segundos restantes do bônus "Bem alimentado". */
   buffTime = 0;
@@ -199,8 +201,9 @@ export class Player {
     }
 
     // --- Energia e corrida ---
-    // A fome aumenta com o tempo (cerca de 25 minutos para esvaziar), mais rápido correndo ou nadando.
-    const effort = input.sprint && inputMag > 0.1 ? 2 : this.swimming ? 1.5 : 1;
+    // A fome aumenta com o tempo (cerca de 25 minutos para esvaziar), mais rápido correndo, nadando
+    // ou na chuva. Molhado, a energia também volta mais devagar.
+    const effort = (input.sprint && inputMag > 0.1 ? 2 : this.swimming ? 1.5 : 1) + this.exposure * 0.5;
     this.hunger = Math.max(0, this.hunger - dt * 0.066 * effort);
     const buffed = this.buffTime > 0;
     if (this.buffTime > 0) this.buffTime = Math.max(0, this.buffTime - dt);
@@ -211,7 +214,7 @@ export class Player {
     } else {
       this.energyRegenDelay -= dt;
       // Com fome a energia volta devagar; faminto, não volta.
-      const hungerFactor = this.hunger <= 0 ? 0 : this.hunger < 25 ? 0.4 : 1;
+      const hungerFactor = (this.hunger <= 0 ? 0 : this.hunger < 25 ? 0.4 : 1) * (1 - this.exposure * 0.5);
       if (this.energyRegenDelay <= 0) {
         this.energy = Math.min(this.maxEnergy, this.energy + dt * (buffed ? 16 : 8) * hungerFactor);
       }
