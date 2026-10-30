@@ -22,10 +22,11 @@ import { PauseMenu } from './panels/PauseMenu';
 import { QuestPanel } from './panels/QuestPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import { StoragePanel } from './panels/StoragePanel';
+import { SavesPanel } from './panels/SavesPanel';
 import type { PlacedStructure } from '../game/Building';
 import { TouchControls } from './TouchControls';
 
-export type PanelId = 'inventario' | 'fabricacao' | 'construcao' | 'mapa' | 'missoes' | 'pausa' | 'opcoes' | 'ajuda' | 'bau';
+export type PanelId = 'inventario' | 'fabricacao' | 'construcao' | 'mapa' | 'missoes' | 'pausa' | 'opcoes' | 'ajuda' | 'bau' | 'salvamentos';
 
 const TIPS = [
   'Dica: segure E (ou o botão de mão) para coletar sem parar.',
@@ -55,6 +56,7 @@ export class UIManager {
     opcoes: SettingsPanel;
     ajuda: HelpPanel;
     bau: StoragePanel;
+    salvamentos: SavesPanel;
   };
   private readonly panelLayer: HTMLElement;
   private readonly loadingEl: HTMLElement;
@@ -94,6 +96,7 @@ export class UIManager {
       opcoes: new SettingsPanel(this, game),
       ajuda: new HelpPanel(this, game),
       bau: new StoragePanel(this, game),
+      salvamentos: new SavesPanel(this, game),
     };
     for (const panel of Object.values(this.panels)) this.panelLayer.append(panel.el);
 
@@ -213,7 +216,7 @@ export class UIManager {
     if (this.activePanel === panel) return;
     if (this.activePanel) {
       // Opções e ajuda abertas a partir da pausa voltam para a pausa.
-      if (this.activePanel.id === 'pausa' && (id === 'opcoes' || id === 'ajuda')) this.panelHistory.push('pausa');
+      if (this.activePanel.id === 'pausa' && (id === 'opcoes' || id === 'ajuda' || id === 'salvamentos')) this.panelHistory.push('pausa');
       this.activePanel.close();
     }
     this.activePanel = panel;
@@ -304,9 +307,10 @@ export class UIManager {
             <button class="btn btn-primary btn-big hidden" data-menu="continuar">${icon('play')}<span>Continuar<small></small></span></button>
             <button class="btn btn-big" data-menu="novo">${icon('estrela')}<span>Novo jogo</span></button>
             <div class="menu-row">
+              <button class="btn" data-menu="salvamentos">${icon('salvar')} Salvamentos</button>
               <button class="btn" data-menu="opcoes">${icon('engrenagem')} Opções</button>
-              <button class="btn" data-menu="ajuda">${icon('info')} Como jogar</button>
             </div>
+            <button class="btn btn-ghost btn-small" data-menu="ajuda">${icon('info')} Como jogar</button>
             <button class="btn btn-ghost btn-small" data-menu="tela">${icon('tela')} <span>Tela cheia</span></button>
           </div>
           <p class="storage-warning hidden">Atenção: o navegador está bloqueando o armazenamento local; o progresso não será salvo ao fechar a página.</p>
@@ -327,6 +331,9 @@ export class UIManager {
           break;
         case 'opcoes':
           this.openPanel('opcoes');
+          break;
+        case 'salvamentos':
+          this.openPanel('salvamentos');
           break;
         case 'ajuda':
           this.openPanel('ajuda');

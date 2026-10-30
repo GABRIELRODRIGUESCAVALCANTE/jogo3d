@@ -1,0 +1,67 @@
+# Gera o APK Android (versão de teste, "debug") com o Capacitor.
+# Rode manualmente em Actions → "APK Android" → "Run workflow", ou crie uma tag v1.0.0.
+# O APK fica disponível para download na página da execução (seção "Artifacts").
+name: APK Android
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+    paths:
+      - '.github/workflows/android.yml'
+      - 'capacitor.config.json'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências e gerar o jogo
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar plataforma Android 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Criar o projeto Android (Capacitor)
+        run: |
+          npx cap add android
+          npx cap sync android
+          # Jogo sempre na horizontal.
+          sed -i 's/<activity/<activity android:screenOrientation="sensorLandscape"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Ícone do jogo
+        run: |
+          res=android/app/src/main/res
+          icon=public/assets/icons/icon-512.png
+          for pair in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+            IFS=: read dpi size fg <<< "$pair"
+            convert "$icon" -resize ${size}x${size} "$res/mipmap-$dpi/ic_launcher.png"
+            convert "$icon" -resize ${size}x${size} "$res/mipmap-$dpi/ic_launcher_round.png"
+            convert "$icon" -resize $((fg * 66 / 100))x$((fg * 66 / 100)) -background none -gravity center -extent ${fg}x${fg} "$res/mipmap-$dpi/ic_launcher_foreground.png"
+          done
+
+      - name: Compilar o APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alem-do-horizonte-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

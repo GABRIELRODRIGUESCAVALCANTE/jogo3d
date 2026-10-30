@@ -820,37 +820,24 @@ export class Game {
       return;
     }
     if (this.ui.dialogs.isOpen) return;
-    switch (code) {
-      case 'Escape':
-        // Ignora o Esc que o navegador usou para liberar o mouse.
-        if (performance.now() - this.lastUnexpectedUnlock < 250) return;
-        if (this.ui.activePanel) this.ui.closePanel();
-        else if (this.fishing.active) this.fishing.stop();
-        else if (this.building.mode !== 'none') this.cancelBuild();
-        else this.ui.openPanel('pausa');
-        break;
-      case 'KeyI':
-      case 'Tab':
-        this.ui.togglePanel('inventario');
-        break;
-      case 'KeyC':
-        this.ui.togglePanel('fabricacao');
-        break;
-      case 'KeyB':
-        if (this.building.mode !== 'none') this.cancelBuild();
-        this.ui.togglePanel('construcao');
-        break;
-      case 'KeyM':
-        this.ui.togglePanel('mapa');
-        break;
-      case 'KeyJ':
-      case 'KeyL':
-        this.ui.togglePanel('missoes');
-        break;
-      case 'KeyP':
-        this.ui.togglePanel('pausa');
-        break;
+    if (code === 'Escape') {
+      // Ignora o Esc que o navegador usou para liberar o mouse.
+      if (performance.now() - this.lastUnexpectedUnlock < 250) return;
+      if (this.ui.activePanel) this.ui.closePanel();
+      else if (this.fishing.active) this.fishing.stop();
+      else if (this.building.mode !== 'none') this.cancelBuild();
+      else this.ui.openPanel('pausa');
+      return;
     }
+    const keys = this.input.bindings;
+    if (keys.matches('inventario', code)) this.ui.togglePanel('inventario');
+    else if (keys.matches('fabricar', code)) this.ui.togglePanel('fabricacao');
+    else if (keys.matches('construir', code)) {
+      if (this.building.mode !== 'none') this.cancelBuild();
+      this.ui.togglePanel('construcao');
+    } else if (keys.matches('mapa', code)) this.ui.togglePanel('mapa');
+    else if (keys.matches('missoes', code)) this.ui.togglePanel('missoes');
+    else if (code === 'KeyP') this.ui.togglePanel('pausa');
   }
 
   /** Painéis abrem/fecham: solta o mouse ou tenta capturá-lo de novo. */
@@ -923,6 +910,15 @@ export class Game {
   /** Controles, áudio e duração do dia (não exigem recompilar materiais). */
   private applyGameplaySettings(): void {
     const s = this.settings.data;
+    // Acessibilidade e teclas.
+    this.input.bindings.custom = { ...s.keys } as typeof this.input.bindings.custom;
+    this.cameraCtl.shakeEnabled = !s.reduceMotion;
+    this.building?.setColorblind(s.colorblind);
+    const root = document.documentElement;
+    root.style.setProperty('--ui-scale', String(s.uiScale || 1));
+    root.classList.toggle('colorblind', s.colorblind);
+    root.classList.toggle('reduce-motion', s.reduceMotion);
+    this.ui.hud.refreshKeys(this.input.bindings);
     if (s.character !== this.characterLoaded) void this.applyCharacter();
     this.cameraCtl.sensitivity = s.sensitivity;
     this.cameraCtl.invertY = s.invertY;
@@ -1015,6 +1011,7 @@ export class Game {
 
   private async showMenu(): Promise<void> {
     this.state = 'menu';
+    await this.saveSystem.restoreLastSlot();
     const summary = await this.saveSystem.summary();
     this.hasSave = summary !== null;
     this.world.dayNight.setTime(16.8);
@@ -1025,17 +1022,77 @@ export class Game {
     if (this.saveSystem.lastError && !summary) this.ui.notify.toast(this.saveSystem.lastError, 'warning');
   }
 
+  /** "Novo jogo" no menu: usa o espaço atual se estiver vazio; senão, deixa escolher. */
   async newGameFromMenu(): Promise<void> {
-    if (this.hasSave) {
+    if (!this.hasSave) {
+      await this.startNewGame();
+      return;
+    }
+    this.ui.openPanel('salvamentos');
+  }
+
+  /** Começa um jogo novo num espaço (pede confirmação se ele tiver progresso). */
+  async newGameInSlot(slot: number): Promise<void> {
+    if (await this.saveSystem.hasSave(slot)) {
       const ok = await this.ui.dialogs.confirm({
-        title: 'Começar um novo jogo?',
-        message: 'Já existe um progresso salvo. Ao começar de novo, ele será substituído.',
+        title: `Começar um novo jogo no espaço ${slot}?`,
+        message: 'Já existe um progresso salvo neste espaço. Ao começar de novo, ele será substituído.',
         confirmText: 'Começar do zero',
         danger: true,
       });
       if (!ok) return;
     }
+    if (this.state === 'playing') await this.saveGame(false);
+    await this.saveSystem.useSlot(slot);
+    this.hasSave = false;
     await this.startNewGame();
+  }
+
+  /** Baixa o salvamento de um espaço como arquivo .json. */
+  async exportSlot(slot: number): Promise<void> {
+    if (this.state === 'playing' && slot === this.saveSystem.slot) await this.saveGame(false);
+    const text = await this.saveSystem.exportText(slot);
+    if (!text) return;
+    try {
+      const blob = new Blob([text], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `alem-do-horizonte-espaco${slot}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+      this.ui.notify.toast('Arquivo do salvamento baixado.', 'success', 'salvar');
+    } catch {
+      this.ui.notify.toast('Este navegador não permitiu baixar o arquivo.', 'warning');
+    }
+  }
+
+  /** Escolhe um arquivo .json e grava no espaço (pede confirmação se ocupado). */
+  async importSlot(slot: number): Promise<void> {
+    const file = await new Promise<File | null>((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.addEventListener('change', () => resolve(input.files?.[0] ?? null));
+      input.addEventListener('cancel', () => resolve(null));
+      input.click();
+    });
+    if (!file) return;
+    if (await this.saveSystem.hasSave(slot)) {
+      const ok = await this.ui.dialogs.confirm({
+        title: `Substituir o espaço ${slot}?`,
+        message: 'O progresso atual deste espaço será trocado pelo do arquivo.',
+        confirmText: 'Substituir',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    const error = await this.saveSystem.importText(await file.text(), slot);
+    if (error) this.ui.notify.toast(error, 'warning');
+    else this.ui.notify.toast(`Salvamento importado no espaço ${slot}.`, 'success', 'salvar');
+    if (this.state !== 'playing') await this.showMenu();
   }
 
   async startNewGame(): Promise<void> {
@@ -1069,7 +1126,11 @@ export class Game {
     );
   }
 
-  async continueGame(): Promise<void> {
+  async continueGame(slot?: number): Promise<void> {
+    if (slot !== undefined && slot !== this.saveSystem.slot) {
+      if (this.state === 'playing') await this.saveGame(false);
+      await this.saveSystem.useSlot(slot);
+    }
     const data = await this.saveSystem.load();
     if (!data) {
       this.ui.notify.toast(this.saveSystem.lastError ?? 'Nenhum salvamento encontrado.', 'warning');
@@ -1231,21 +1292,21 @@ export class Game {
     void this.showMenu();
   }
 
-  async confirmDeleteSave(): Promise<void> {
+  async confirmDeleteSave(slot = this.saveSystem.slot): Promise<void> {
     const ok = await this.ui.dialogs.confirm({
-      title: 'Apagar salvamento?',
+      title: `Apagar o salvamento do espaço ${slot}?`,
       message:
         'Todo o progresso (inventário, construções, missões e mapa explorado) será apagado permanentemente. Esta ação não pode ser desfeita.',
       confirmText: 'Apagar tudo',
       danger: true,
     });
     if (!ok) return;
-    await this.saveSystem.delete();
-    this.hasSave = false;
+    await this.saveSystem.delete(slot);
+    if (slot === this.saveSystem.slot) this.hasSave = false;
     this.ui.notify.toast('Salvamento apagado.', 'info', 'lixeira');
-    if (this.state === 'playing') {
+    if (this.state === 'playing' && slot === this.saveSystem.slot) {
       this.leaveToMenu();
-    } else {
+    } else if (this.state !== 'playing') {
       this.ui.refresh('opcoes');
       await this.showMenu();
     }

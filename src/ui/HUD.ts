@@ -7,15 +7,16 @@ import type { Game } from '../game/Game';
 import { HUD_RESOURCES, ITEMS } from '../game/data/items';
 import { STRUCTURES } from '../game/data/structures';
 import { $, escapeHtml, html } from './dom';
+import { keyLabel, type BindableAction, type KeyBindings } from '../core/KeyBindings';
 import { icon } from './icons';
 import type { PanelId } from './UIManager';
 
-const MENU_BUTTONS: Array<{ panel: PanelId; icon: string; label: string; key: string }> = [
-  { panel: 'inventario', icon: 'mochila', label: 'Inventário', key: 'I' },
-  { panel: 'fabricacao', icon: 'martelo', label: 'Fabricar', key: 'C' },
-  { panel: 'construcao', icon: 'construir', label: 'Construir', key: 'B' },
-  { panel: 'mapa', icon: 'mapa', label: 'Mapa', key: 'M' },
-  { panel: 'missoes', icon: 'missao', label: 'Missões', key: 'J' },
+const MENU_BUTTONS: Array<{ panel: PanelId; icon: string; label: string; key: string; action?: BindableAction }> = [
+  { panel: 'inventario', icon: 'mochila', label: 'Inventário', key: 'I', action: 'inventario' },
+  { panel: 'fabricacao', icon: 'martelo', label: 'Fabricar', key: 'C', action: 'fabricar' },
+  { panel: 'construcao', icon: 'construir', label: 'Construir', key: 'B', action: 'construir' },
+  { panel: 'mapa', icon: 'mapa', label: 'Mapa', key: 'M', action: 'mapa' },
+  { panel: 'missoes', icon: 'missao', label: 'Missões', key: 'J', action: 'missoes' },
   { panel: 'pausa', icon: 'pausa', label: 'Pausa', key: 'Esc' },
 ];
 
@@ -47,6 +48,8 @@ export class HUD {
   private resourcesDirty = true;
   private lastPrompt = '';
   private lastNight: boolean | null = null;
+  private interactKey = 'E';
+  private rotateKey = 'R';
 
   constructor(
     root: HTMLElement,
@@ -116,6 +119,20 @@ export class HUD {
     });
     $(this.el, '.minimap-wrap').addEventListener('click', () => onMenu('mapa'));
     this.trackerEl.addEventListener('click', () => onMenu('missoes'));
+  }
+
+  /** Atualiza as letras das teclas nos botões (o jogador pode trocar as teclas). */
+  refreshKeys(bindings: KeyBindings): void {
+    this.interactKey = keyLabel(bindings.primary('interagir'));
+    this.rotateKey = keyLabel(bindings.primary('girar'));
+    this.lastPrompt = '';
+    for (const b of MENU_BUTTONS) {
+      if (!b.action) continue;
+      const btn = this.el.querySelector<HTMLElement>(`.hud-btn[data-panel="${b.panel}"]`);
+      const label = keyLabel(bindings.primary(b.action));
+      btn?.querySelector('kbd')?.replaceChildren(label);
+      btn?.setAttribute('title', `${b.label} (${label})`);
+    }
   }
 
   setVisible(visible: boolean): void {
@@ -264,7 +281,7 @@ export class HUD {
       this.buildEl.classList.remove('hidden');
       const keys = touch
         ? ''
-        : '<span class="keys"><kbd>R</kbd> girar · <kbd>E</kbd>/clique construir · <kbd>Esc</kbd> cancelar</span>';
+        : `<span class="keys"><kbd>${escapeHtml(this.rotateKey)}</kbd> girar · <kbd>${escapeHtml(this.interactKey)}</kbd>/clique construir · <kbd>Esc</kbd> cancelar</span>`;
       this.buildEl.innerHTML = `${icon(def.icon)}<b>${escapeHtml(def.name)}</b>${keys}`;
       text = check.ok ? 'Local válido' : (check.reason ?? 'Local inválido');
       cls = check.ok ? 'ok' : 'blocked';
@@ -278,9 +295,8 @@ export class HUD {
       this.buildEl.classList.add('hidden');
       const action = g.interaction.currentAction;
       if (g.boatCtl.active && g.isPlaying) {
-        text = touch ? 'Joystick conduz o barco' : 'Navegando: W/S velocidade · A/D direção · [E] desembarcar';
+        text = touch ? 'Joystick conduz o barco' : '[E] Desembarcar · frente/trás: velocidade · lados: direção';
         cls = 'muted';
-        if (text.includes('[E]')) text = '[E] Desembarcar · W/S velocidade · A/D direção';
       } else if (g.fishing.active && g.isPlaying) {
         const bite = g.fishing.state === 'bite';
         text = bite && !touch ? '[E] Puxe agora!' : g.fishing.prompt;
@@ -299,6 +315,7 @@ export class HUD {
     this.lastPrompt = key;
     const hideOnTouch = touch && g.building.mode === 'none' && !g.fishing.active && !g.boatCtl.active;
     this.promptEl.className = `prompt ${cls} ${!text || hideOnTouch ? 'hidden' : ''}`;
-    this.promptEl.innerHTML = text.startsWith('[E] ') ? `<kbd>E</kbd>${escapeHtml(text.slice(4))}` : escapeHtml(text);
+    // "[E] " marca o lugar da tecla de interagir (que o jogador pode ter trocado).
+    this.promptEl.innerHTML = text.startsWith('[E] ') ? `<kbd>${escapeHtml(this.interactKey)}</kbd>${escapeHtml(text.slice(4))}` : escapeHtml(text);
   }
 }

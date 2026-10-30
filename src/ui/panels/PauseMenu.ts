@@ -38,6 +38,9 @@ export class PauseMenu extends Panel {
         case 'apagar':
           void this.game.confirmDeleteSave();
           break;
+        case 'salvamentos':
+          this.ui.openPanel('salvamentos');
+          break;
       }
     });
   }
@@ -55,6 +58,7 @@ export class PauseMenu extends Panel {
       <div class="menu-buttons">
         <button class="btn btn-primary btn-big" data-act="continuar">${icon('play')} Continuar</button>
         <button class="btn" data-act="salvar">${icon('salvar')} Salvar jogo</button>
+        <button class="btn" data-act="salvamentos">${icon('salvar')} Salvamentos (espaço ${g.saveSystem.slot})</button>
         <button class="btn" data-act="opcoes">${icon('engrenagem')} Opções</button>
         <button class="btn" data-act="ajuda">${icon('info')} Como jogar</button>
         ${document.fullscreenEnabled ? `<button class="btn" data-act="tela">${icon('tela')} ${isFullscreen() ? 'Sair da tela cheia' : 'Tela cheia'}</button>` : ''}

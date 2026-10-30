@@ -18,6 +18,9 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@playwright/test": "1.63.0",
     "@types/node": "^22.20.5",
     "@types/three": "^0.186.0",

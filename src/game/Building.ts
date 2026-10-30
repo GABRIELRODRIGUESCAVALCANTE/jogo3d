@@ -108,6 +108,12 @@ export class BuildingSystem implements InteractableProvider {
   });
   private time = 0;
   private roofZones: CameraZone[] = [];
+  /** Cores do fantasma: válido / inválido (azul e laranja no modo daltonismo). */
+  private ghostColors = { ok: '#6dff8a', bad: '#ff5d5d' };
+
+  setColorblind(on: boolean): void {
+    this.ghostColors = on ? { ok: '#4da3ff', bad: '#ffa13d' } : { ok: '#6dff8a', bad: '#ff5d5d' };
+  }
 
   constructor(
     private readonly terrain: HeightField,
@@ -304,7 +310,7 @@ export class BuildingSystem implements InteractableProvider {
       this.ghostPos.set(x, this.ghostCheck.y, z);
       this.ghost.position.copy(this.ghostPos);
       this.ghost.rotation.y = this.ghostRot;
-      this.ghostMaterial.color.set(this.ghostCheck.ok ? '#6dff8a' : '#ff5d5d');
+      this.ghostMaterial.color.set(this.ghostCheck.ok ? this.ghostColors.ok : this.ghostColors.bad);
       this.ghostMaterial.opacity = 0.38 + Math.sin(this.time * 5) * 0.08;
     }
   }

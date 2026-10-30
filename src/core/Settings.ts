@@ -25,6 +25,14 @@ export interface SettingsData {
   dayLength: DayLength;
   /** Aparência do personagem. */
   character: CharacterLook;
+  /** Tamanho da interface (1 = normal). */
+  uiScale: number;
+  /** Cores pensadas para daltonismo (azul/laranja no lugar de verde/vermelho). */
+  colorblind: boolean;
+  /** Menos animações e sem tremor de câmera. */
+  reduceMotion: boolean;
+  /** Teclas trocadas pelo jogador (ação → código da tecla). */
+  keys: Record<string, string>;
 }
 
 /** Parâmetros técnicos de cada nível de qualidade. */
@@ -100,6 +108,10 @@ function defaultSettings(): SettingsData {
     volumeMusic: 0.4,
     dayLength: 'normal',
     character: 'explorador',
+    uiScale: 1,
+    colorblind: false,
+    reduceMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+    keys: {},
   };
 }
 
